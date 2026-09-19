@@ -88,33 +88,15 @@ const shippingMethodSelect = document.getElementById("shippingMethod");
 
 /* ---------------------------------
    Načtení kategorií (MapaKat.txt)
+   - parsování je v categories.js
+     (sdílené s dashboardem)
    - pokud v Android prohlížeči fetch
      selže, kategorie se nenačtou,
      ale zbytek poběží normálně.
 -----------------------------------*/
-function parseCategoriesHierarchically(text) {
-  const lines = text.split('\n');
-  let groups = [];
-  let currentGroup = null;
-  lines.forEach(line => {
-    if (line.startsWith('####')) {
-      if (currentGroup) groups.push(currentGroup);
-      currentGroup = { name: line.replace(/#+/g, '').trim(), cats: [] };
-    } else if (line.match(/\((\d+)\)/)) {
-      const match = line.match(/(.*)\((\d+)\)/);
-      if (match && currentGroup) {
-        currentGroup.cats.push({ name: match[1].replace(/[-*•]/g, '').trim(), id: parseInt(match[2]) });
-      }
-    }
-  });
-  if (currentGroup) groups.push(currentGroup);
-  return groups;
-}
-
-fetch('MapaKat.txt')
-  .then((response) => response.text())
-  .then((text) => {
-    categories = parseCategoriesHierarchically(text);
+window.loadCategoryGroups()
+  .then((groups) => {
+    categories = groups;
   })
   .catch((err) => {
     updateStatus('❌ Chyba při načítání kategorií! Zkontroluj soubor.');

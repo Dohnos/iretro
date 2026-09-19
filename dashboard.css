@@ -170,10 +170,111 @@
   opacity: 0.85;
 }
 .sold-toggle {
-  margin-top: 6px;
   width: 100%;
   border-radius: var(--border-radius-md) !important;
   font-weight: 700 !important;
+}
+.prod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.prod-actions .button {
+  flex: 1 1 110px;
+  border-radius: var(--border-radius-md) !important;
+  font-weight: 700 !important;
+}
+
+/* Modál úpravy produktu */
+.edit-modal-content {
+  max-width: 560px !important;
+}
+.edit-modal-box {
+  max-height: 86vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.edit-modal-id {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.edit-hint {
+  opacity: 0.75;
+}
+.edit-error {
+  color: var(--danger-color);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 1em;
+}
+#edit-category-btn {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid var(--panel-border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Fotky v modálu úprav */
+.edit-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.edit-photo-item {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+}
+.edit-photo-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.edit-photo-main {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 2px 0;
+}
+.edit-photo-remove,
+.edit-photo-first {
+  position: absolute;
+  top: 2px;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: none;
+  border-radius: 50%;
+  background: rgba(11, 15, 23, 0.75);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: var(--transition-smooth);
+}
+.edit-photo-remove {
+  right: 2px;
+  font-size: 1rem;
+}
+.edit-photo-first {
+  left: 2px;
+}
+.edit-photo-remove:hover {
+  background: var(--danger-color);
+}
+.edit-photo-first:hover {
+  background: var(--accent-color);
 }
 
 /* Modál fotek */

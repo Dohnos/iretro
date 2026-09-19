@@ -170,9 +170,14 @@ function card(p) {
         <span>📦 ${escapeHtml(p.location || "—")}</span>
       </div>
       <div class="prod-date">🕒 ${fmtDate(p.created_at)}</div>
-      <button class="button is-small is-rounded sold-toggle ${p.sold ? "is-light" : "is-danger"}">
-        ${p.sold ? "↩️ Zrušit prodej" : "✅ Označit jako prodáno"}
-      </button>
+      <div class="prod-actions">
+        <button class="button is-small is-rounded edit-toggle is-light">
+          ✏️ Upravit
+        </button>
+        <button class="button is-small is-rounded sold-toggle ${p.sold ? "is-light" : "is-danger"}">
+          ${p.sold ? "↩️ Zrušit prodej" : "✅ Označit jako prodáno"}
+        </button>
+      </div>
     </div>
   `;
 
@@ -182,6 +187,7 @@ function card(p) {
     thumbEl.addEventListener("click", () => openPhotos(imgs));
   }
   el.querySelector(".sold-toggle").addEventListener("click", (e) => toggleSold(p, e.currentTarget));
+  el.querySelector(".edit-toggle").addEventListener("click", () => openEdit(p));
   return el;
 }
 
@@ -204,6 +210,272 @@ async function toggleSold(p, btn) {
   p.sold = newVal;
   updateStats();
   render();
+}
+
+/* ==========================================================
+   Úprava produktu
+   Uloží se jak "ploché" sloupce (pro dashboard), tak odpovídající
+   pole v "raw" – z toho se skládá Excel pro Aukro, ať se obojí
+   nerozejde.
+   ==========================================================*/
+let editingProduct = null;   // produkt otevřený v modálu
+let editPhotos = [];         // rozpracovaný seznam fotek
+let categoryGroups = [];     // kategorie z MapaKat.txt
+
+const editModal = document.getElementById("edit-modal");
+const editNameInput = document.getElementById("edit-name");
+const editPriceInput = document.getElementById("edit-price");
+const editLocationInput = document.getElementById("edit-location");
+const editDateInput = document.getElementById("edit-date");
+const editShippingSelect = document.getElementById("edit-shipping");
+const editCategoryBtn = document.getElementById("edit-category-btn");
+const editCategoryText = document.getElementById("edit-category-text");
+const editCategoryIdInput = document.getElementById("edit-category-id");
+const editCategoryPanel = document.getElementById("edit-category-panel");
+const editCategorySearch = document.getElementById("edit-category-search");
+const editCategoryList = document.getElementById("category-list");
+const editPromoPriority = document.getElementById("edit-promo-priority");
+const editPromoBold = document.getElementById("edit-promo-bold");
+const editPromoHighlight = document.getElementById("edit-promo-highlight");
+const editPhotosBox = document.getElementById("edit-photos");
+const editPhotoUrlInput = document.getElementById("edit-photo-url");
+const editPhotoAddBtn = document.getElementById("edit-photo-add");
+const editErrorElem = document.getElementById("edit-error");
+const editSaveBtn = document.getElementById("edit-save-btn");
+const editCancelBtn = document.getElementById("edit-cancel-btn");
+
+// Kategorie načteme na pozadí, ať je výběr hned po otevření modálu.
+window.loadCategoryGroups()
+  .then((groups) => {
+    categoryGroups = groups;
+    if (editingProduct) refreshCategoryButton();
+  })
+  .catch(() => {
+    /* Bez MapaKat.txt jde kategorie zadat jen číslem – modál dál funguje. */
+  });
+
+// "2025-03-26" z ISO data nebo z date_added
+function dateInputValue(p) {
+  if (p.date_added && /^\d{4}-\d{2}-\d{2}$/.test(p.date_added)) return p.date_added;
+  if (p.created_at) {
+    const d = new Date(p.created_at);
+    if (!isNaN(d)) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`;
+    }
+  }
+  return "";
+}
+
+function refreshCategoryButton() {
+  const id = editCategoryIdInput.value.trim();
+  if (!id) {
+    editCategoryText.textContent = "Vybrat kategorii";
+    return;
+  }
+  const name = window.findCategoryName(categoryGroups, id);
+  editCategoryText.textContent = name ? `${name} (${id})` : `Kategorie ${id}`;
+}
+
+function renderCategoryList(query) {
+  const q = String(query || "").toLowerCase().trim();
+  editCategoryList.innerHTML = "";
+  let found = false;
+  categoryGroups.forEach((group) => {
+    const filtered = (group.cats || []).filter((c) => c.name.toLowerCase().includes(q));
+    if (!filtered.length) return;
+    const groupEl = document.createElement("div");
+    groupEl.className = "category-group";
+    groupEl.textContent = "📂 " + group.name;
+    editCategoryList.appendChild(groupEl);
+    filtered.forEach((cat) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.innerHTML = "📦 " + escapeHtml(cat.name);
+      btn.addEventListener("click", () => {
+        editCategoryIdInput.value = cat.id;
+        refreshCategoryButton();
+        editCategoryPanel.classList.add("is-hidden");
+      });
+      editCategoryList.appendChild(btn);
+    });
+    found = true;
+  });
+  if (!found) {
+    const none = document.createElement("p");
+    none.className = "has-text-grey";
+    none.textContent = categoryGroups.length
+      ? "😕 Žádné kategorie nenalezeny."
+      : "⚠️ Kategorie se nepodařilo načíst (MapaKat.txt).";
+    editCategoryList.appendChild(none);
+  }
+}
+
+function renderEditPhotos() {
+  editPhotosBox.innerHTML = "";
+  if (!editPhotos.length) {
+    editPhotosBox.innerHTML = `<p class="has-text-grey is-size-7">Žádné fotky.</p>`;
+    return;
+  }
+  editPhotos.forEach((url, index) => {
+    const item = document.createElement("div");
+    item.className = "edit-photo-item";
+    item.innerHTML = `
+      <img src="${escapeHtml(url)}" alt="foto ${index + 1}" />
+      ${index === 0 ? '<span class="edit-photo-main">hlavní</span>' : ""}
+    `;
+
+    if (index > 0) {
+      const firstBtn = document.createElement("button");
+      firstBtn.type = "button";
+      firstBtn.className = "edit-photo-first";
+      firstBtn.title = "Dát jako hlavní";
+      firstBtn.innerHTML = "⭐";
+      firstBtn.addEventListener("click", () => {
+        editPhotos.splice(index, 1);
+        editPhotos.unshift(url);
+        renderEditPhotos();
+      });
+      item.appendChild(firstBtn);
+    }
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "edit-photo-remove";
+    removeBtn.title = "Odebrat fotku";
+    removeBtn.innerHTML = "&times;";
+    removeBtn.addEventListener("click", () => {
+      editPhotos.splice(index, 1);
+      renderEditPhotos();
+    });
+    item.appendChild(removeBtn);
+
+    editPhotosBox.appendChild(item);
+  });
+}
+
+function openEdit(p) {
+  editingProduct = p;
+  editPhotos = imagesOf(p).slice();
+
+  document.getElementById("edit-product-id").textContent = p.product_id || "—";
+  editNameInput.value = p.name || "";
+  editPriceInput.value = p.price != null ? p.price : "";
+  editLocationInput.value = p.location || "";
+  editDateInput.value = dateInputValue(p);
+  editCategoryIdInput.value = p.category_id != null ? p.category_id : "";
+  refreshCategoryButton();
+
+  const shipping = p.shipping_template_id != null ? String(p.shipping_template_id) : "";
+  // Doprava, kterou seznam nezná (starší produkt), se do selectu doplní.
+  if (shipping && !Array.from(editShippingSelect.options).some((o) => o.value === shipping)) {
+    const opt = document.createElement("option");
+    opt.value = shipping;
+    opt.textContent = `Jiná (ID ${shipping})`;
+    editShippingSelect.appendChild(opt);
+  }
+  editShippingSelect.value = shipping;
+
+  editPromoPriority.checked = !!p.priority_listing;
+  editPromoBold.checked = !!p.bold_title;
+  editPromoHighlight.checked = !!p.highlight;
+
+  editCategoryPanel.classList.add("is-hidden");
+  editCategorySearch.value = "";
+  editPhotoUrlInput.value = "";
+  editErrorElem.textContent = "";
+  renderEditPhotos();
+
+  editModal.classList.add("is-active");
+}
+
+function closeEdit() {
+  editModal.classList.remove("is-active");
+  editingProduct = null;
+}
+
+async function saveEdit() {
+  if (!editingProduct || !window.db) return;
+  const p = editingProduct;
+
+  const name = editNameInput.value.trim();
+  const priceRaw = editPriceInput.value.trim();
+  const location = editLocationInput.value.trim();
+  const dateStr = editDateInput.value;
+  const categoryId = editCategoryIdInput.value.trim();
+  const shippingId = editShippingSelect.value;
+
+  if (!name) {
+    editErrorElem.textContent = "⚠️ Název nesmí být prázdný.";
+    return;
+  }
+  if (priceRaw === "" || isNaN(parseInt(priceRaw, 10))) {
+    editErrorElem.textContent = "⚠️ Zadej cenu číslem.";
+    return;
+  }
+  editErrorElem.textContent = "";
+
+  const price = parseInt(priceRaw, 10);
+  const categoryNum = categoryId ? parseInt(categoryId, 10) : null;
+  const shippingNum = shippingId ? parseInt(shippingId, 10) : null;
+  const images = editPhotos.join(" ");
+  const extId = p.product_id ? `${location} | ${p.product_id}` : p.ext_id || null;
+
+  const patch = {
+    name,
+    price,
+    location: location || null,
+    ext_id: extId,
+    category_id: categoryNum,
+    shipping_template_id: shippingNum,
+    images,
+    image_list: editPhotos.slice(),
+    priority_listing: editPromoPriority.checked,
+    bold_title: editPromoBold.checked,
+    highlight: editPromoHighlight.checked,
+    updated_at: new Date().toISOString()
+  };
+
+  // Datum: mění se jen když ho uživatel opravdu přepsal. Do created_at
+  // dáváme poledne, stejně jako zpětné zadávání v appce.
+  if (dateStr && dateStr !== dateInputValue(p)) {
+    const d = new Date(`${dateStr}T12:00:00`);
+    patch.date_added = dateStr;
+    if (!isNaN(d)) patch.created_at = d.toISOString();
+  }
+
+  // "raw" drží podobu produktu pro export do Aukra – držíme ho v souladu.
+  patch.raw = Object.assign({}, p.raw || {}, {
+    name,
+    extId,
+    auctionPriceAmount: price,
+    categoryId: categoryNum,
+    shippingTemplateId: shippingNum,
+    images,
+    locationName: location,
+    priorityListing: editPromoPriority.checked,
+    boldTitle: editPromoBold.checked,
+    highlight: editPromoHighlight.checked,
+    dateAdded: patch.date_added || p.date_added || null
+  });
+
+  editSaveBtn.classList.add("is-loading");
+  try {
+    await window.db.collection("products").doc(p._docId).update(patch);
+  } catch (e) {
+    editSaveBtn.classList.remove("is-loading");
+    editErrorElem.textContent = "❌ Uložení selhalo: " + (e.message || e);
+    return;
+  }
+  editSaveBtn.classList.remove("is-loading");
+
+  Object.assign(p, patch);
+  closeEdit();
+  updateStats();
+  render();
+  showStatus(`✅ Produkt ${p.product_id || ""} upraven.`, "is-success");
+  setTimeout(hideStatus, 3000);
 }
 
 /* --- Export Excelu (bez prodaných) --- */
@@ -282,8 +554,37 @@ exportBtn.addEventListener("click", exportExcel);
 photoModal
   .querySelectorAll(".modal-background, .modal-close")
   .forEach((el) => el.addEventListener("click", closePhotos));
+
+/* --- Události modálu úprav --- */
+editCategoryBtn.addEventListener("click", () => {
+  const hidden = editCategoryPanel.classList.toggle("is-hidden");
+  if (!hidden) {
+    renderCategoryList(editCategorySearch.value);
+    editCategorySearch.focus();
+  }
+});
+editCategorySearch.addEventListener("input", () => renderCategoryList(editCategorySearch.value));
+editPhotoAddBtn.addEventListener("click", () => {
+  const url = editPhotoUrlInput.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) {
+    editErrorElem.textContent = "⚠️ Odkaz na fotku musí začínat http(s)://";
+    return;
+  }
+  editErrorElem.textContent = "";
+  editPhotos.push(url);
+  editPhotoUrlInput.value = "";
+  renderEditPhotos();
+});
+editSaveBtn.addEventListener("click", saveEdit);
+editCancelBtn.addEventListener("click", closeEdit);
+editModal.querySelector(".modal-background").addEventListener("click", closeEdit);
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closePhotos();
+  if (e.key === "Escape") {
+    closePhotos();
+    closeEdit();
+  }
 });
 
 /* --- Start (až po přihlášení vlastníka) --- */

@@ -111,6 +111,27 @@ Co se v tomhle režimu změní:
 ID produktů se chovají stejně jako při focení – navazují na nejvyšší už použité
 ID a nejde je použít podruhé.
 
+## ✏️ Úprava produktů v databázi
+V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
+
+| Pole | Poznámka |
+|---|---|
+| Název | formát pro Aukro je `NÁZEV \| ID` |
+| Cena | |
+| Umístění | zároveň se přepočítá `extId` (`umístění \| ID`) |
+| Datum přidání | mění `date_added` i `created_at` (dashboard podle něj řadí) |
+| Kategorie | výběr s hledáním z `MapaKat.txt` |
+| Doprava | stejný seznam jako v appce; neznámé ID u starších produktů se doplní |
+| Propagace | přednostní výpis, tučný titulek, zvýraznění |
+| Fotky | odebrání, přehození pořadí (⭐ = hlavní fotka) a přidání přes odkaz |
+
+**ID produktu měnit nejde** – je to klíč dokumentu v databázi (a pojistka proti
+dvojímu použití ID).
+
+Úprava se ukládá do „plochých“ sloupců i do pole `raw`, ze kterého se skládá
+Excel pro Aukro – export z dashboardu tak vždycky odpovídá tomu, co je vidět
+na kartě.
+
 ## 8️⃣ Nahraj na GitHub a deploy na Vercel 🚀
 ```bash
 git add .

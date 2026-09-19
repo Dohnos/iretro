@@ -105,6 +105,141 @@
     <button class="modal-close is-large" aria-label="close"></button>
   </div>
 
+  <!-- Modál úpravy produktu -->
+  <div id="edit-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content edit-modal-content">
+      <div class="box is-rounded edit-modal-box">
+        <p class="is-size-5 has-text-weight-semibold mb-1">✏️ Upravit produkt</p>
+        <p class="edit-modal-id mb-4">
+          ID <strong id="edit-product-id">—</strong>
+          <span class="edit-hint">(ID se měnit nedá – je to klíč v databázi)</span>
+        </p>
+
+        <!-- Název -->
+        <div class="field mb-4">
+          <label for="edit-name" class="label">Název</label>
+          <input id="edit-name" type="text" class="input is-rounded" autocomplete="off" />
+          <p class="help">Formát pro Aukro: <code>NÁZEV | ID</code></p>
+        </div>
+
+        <!-- Cena -->
+        <div class="field mb-4">
+          <label for="edit-price" class="label">Cena (Kč)</label>
+          <input id="edit-price" type="number" class="input is-rounded" autocomplete="off" />
+        </div>
+
+        <!-- Umístění -->
+        <div class="field mb-4">
+          <label for="edit-location" class="label">Umístění</label>
+          <input id="edit-location" type="text" class="input is-rounded" autocomplete="off" />
+          <p class="help">Přepíše se i <code>extId</code> pro export (umístění | ID).</p>
+        </div>
+
+        <!-- Datum přidání -->
+        <div class="field mb-4">
+          <label for="edit-date" class="label">Datum přidání</label>
+          <input id="edit-date" type="date" class="input is-rounded" />
+        </div>
+
+        <!-- Kategorie -->
+        <div class="field mb-4">
+          <label class="label">Kategorie</label>
+          <button type="button" id="edit-category-btn" class="button is-fullwidth is-rounded">
+            <span id="edit-category-text">Vybrat kategorii</span>
+          </button>
+          <input type="hidden" id="edit-category-id" />
+          <div id="edit-category-panel" class="is-hidden mt-2">
+            <input id="edit-category-search" class="input is-rounded mb-2" type="text"
+                   placeholder="🔍 Hledej kategorii" />
+            <div id="category-list" class="list" style="max-height: 200px; overflow-y: auto;"></div>
+          </div>
+        </div>
+
+        <!-- Doprava -->
+        <div class="field mb-4">
+          <label class="label" for="edit-shipping">Doprava</label>
+          <div class="control">
+            <div class="select is-rounded is-fullwidth">
+              <select id="edit-shipping">
+                <option value="2438895">ZS or BA (ID 2438895)</option>
+                <option value="2438897">PPL (ID 2438897)</option>
+                <option value="2438896">TOPTRANS (ID 2438896)</option>
+                <option value="2438898">OSOBNĚ (ID 2438898)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Propagace -->
+        <div class="field mb-4">
+          <label class="label">Propagace</label>
+          <div class="promo-container">
+            <label class="promo-card" for="edit-promo-priority">
+              <input type="checkbox" id="edit-promo-priority" />
+              <span class="promo-card-custom-box"></span>
+              <div class="promo-card-content">
+                <div class="promo-title">
+                  <i class="fa-solid fa-star"></i><span>Přednostní výpis</span>
+                </div>
+                <div class="promo-desc">priorityListing</div>
+              </div>
+            </label>
+            <label class="promo-card" for="edit-promo-bold">
+              <input type="checkbox" id="edit-promo-bold" />
+              <span class="promo-card-custom-box"></span>
+              <div class="promo-card-content">
+                <div class="promo-title">
+                  <i class="fa-solid fa-bold"></i><span>Tučný titulek</span>
+                </div>
+                <div class="promo-desc">boldTitle</div>
+              </div>
+            </label>
+            <label class="promo-card" for="edit-promo-highlight">
+              <input type="checkbox" id="edit-promo-highlight" />
+              <span class="promo-card-custom-box"></span>
+              <div class="promo-card-content">
+                <div class="promo-title">
+                  <i class="fa-solid fa-highlighter"></i><span>Zvýraznění</span>
+                </div>
+                <div class="promo-desc">highlight</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Fotky -->
+        <div class="field mb-4">
+          <label class="label">Fotky</label>
+          <div id="edit-photos" class="edit-photos"></div>
+          <div class="field has-addons mt-2">
+            <div class="control is-expanded">
+              <input id="edit-photo-url" type="url" class="input is-rounded is-small"
+                     placeholder="https://… odkaz na fotku" />
+            </div>
+            <div class="control">
+              <button type="button" id="edit-photo-add" class="button is-small is-rounded">
+                Přidat
+              </button>
+            </div>
+          </div>
+          <p class="help">První fotka je náhled i hlavní obrázek v Aukru.</p>
+        </div>
+
+        <!-- Chybová hláška -->
+        <p id="edit-error" class="edit-error mb-3"></p>
+
+        <div class="buttons is-right">
+          <button type="button" id="edit-cancel-btn" class="button is-rounded">Zrušit</button>
+          <button type="button" id="edit-save-btn" class="button is-success is-rounded">
+            <i class="fa-solid fa-floppy-disk"></i>&nbsp; Uložit změny
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="categories.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>
