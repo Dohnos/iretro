@@ -132,6 +132,13 @@ dvojímu použití ID).
 Excel pro Aukro – export z dashboardu tak vždycky odpovídá tomu, co je vidět
 na kartě.
 
+### 🗑️ Smazání produktu
+Ve stejném modálu je tlačítko **Smazat**, které po potvrzení odstraní dokument
+z Firestore. Dvě věci k tomu:
+- **Fotky zůstanou na Cloudinary** – maže se jen záznam v databázi.
+- **ID se uvolní.** Appka odvozuje další ID od nejvyššího, které v databázi je;
+  když smažeš produkt s nejvyšším ID, dostane ho příští nový produkt.
+
 ## 8️⃣ Nahraj na GitHub a deploy na Vercel 🚀
 ```bash
 git add .

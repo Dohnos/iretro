@@ -208,6 +208,39 @@
   font-weight: 600;
   min-height: 1em;
 }
+.edit-modal-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.edit-modal-buttons-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Potvrzení smazání */
+.edit-delete-confirm {
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  border-radius: var(--border-radius-md);
+  padding: 12px 14px;
+  font-size: 0.9rem;
+}
+.edit-delete-confirm .edit-hint {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+.edit-delete-confirm .buttons {
+  margin-bottom: 0;
+}
+.edit-delete-confirm .buttons .button {
+  margin-bottom: 0;
+}
 #edit-category-btn {
   background: rgba(255, 255, 255, 0.04) !important;
   border: 1px solid var(--panel-border) !important;

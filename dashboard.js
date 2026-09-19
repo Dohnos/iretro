@@ -243,6 +243,11 @@ const editPhotoAddBtn = document.getElementById("edit-photo-add");
 const editErrorElem = document.getElementById("edit-error");
 const editSaveBtn = document.getElementById("edit-save-btn");
 const editCancelBtn = document.getElementById("edit-cancel-btn");
+const editDeleteBtn = document.getElementById("edit-delete-btn");
+const editDeleteConfirm = document.getElementById("edit-delete-confirm");
+const editDeleteIdElem = document.getElementById("edit-delete-id");
+const editDeleteYesBtn = document.getElementById("edit-delete-yes");
+const editDeleteNoBtn = document.getElementById("edit-delete-no");
 
 // Kategorie načteme na pozadí, ať je výběr hned po otevření modálu.
 window.loadCategoryGroups()
@@ -385,6 +390,7 @@ function openEdit(p) {
   editCategorySearch.value = "";
   editPhotoUrlInput.value = "";
   editErrorElem.textContent = "";
+  editDeleteConfirm.classList.add("is-hidden");
   renderEditPhotos();
 
   editModal.classList.add("is-active");
@@ -476,6 +482,31 @@ async function saveEdit() {
   render();
   showStatus(`✅ Produkt ${p.product_id || ""} upraven.`, "is-success");
   setTimeout(hideStatus, 3000);
+}
+
+/* --- Smazání produktu z databáze --- */
+async function deleteProduct() {
+  if (!editingProduct || !window.db) return;
+  const p = editingProduct;
+  const label = p.product_id || p._docId;
+
+  editDeleteYesBtn.classList.add("is-loading");
+  try {
+    await window.db.collection("products").doc(p._docId).delete();
+  } catch (e) {
+    editDeleteYesBtn.classList.remove("is-loading");
+    editErrorElem.textContent = "❌ Smazání selhalo: " + (e.message || e);
+    editDeleteConfirm.classList.add("is-hidden");
+    return;
+  }
+  editDeleteYesBtn.classList.remove("is-loading");
+
+  allProducts = allProducts.filter((x) => x !== p);
+  closeEdit();
+  updateStats();
+  render();
+  showStatus(`🗑️ Produkt ${label} byl smazán z databáze.`, "is-warning");
+  setTimeout(hideStatus, 4000);
 }
 
 /* --- Export Excelu (bez prodaných) --- */
@@ -578,6 +609,15 @@ editPhotoAddBtn.addEventListener("click", () => {
 });
 editSaveBtn.addEventListener("click", saveEdit);
 editCancelBtn.addEventListener("click", closeEdit);
+editDeleteBtn.addEventListener("click", () => {
+  if (!editingProduct) return;
+  editErrorElem.textContent = "";
+  editDeleteIdElem.textContent = editingProduct.product_id || editingProduct._docId || "—";
+  editDeleteConfirm.classList.remove("is-hidden");
+  editDeleteConfirm.scrollIntoView({ block: "nearest" });
+});
+editDeleteNoBtn.addEventListener("click", () => editDeleteConfirm.classList.add("is-hidden"));
+editDeleteYesBtn.addEventListener("click", deleteProduct);
 editModal.querySelector(".modal-background").addEventListener("click", closeEdit);
 
 document.addEventListener("keydown", (e) => {

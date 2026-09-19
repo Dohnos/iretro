@@ -229,11 +229,35 @@
         <!-- Chybová hláška -->
         <p id="edit-error" class="edit-error mb-3"></p>
 
-        <div class="buttons is-right">
-          <button type="button" id="edit-cancel-btn" class="button is-rounded">Zrušit</button>
-          <button type="button" id="edit-save-btn" class="button is-success is-rounded">
-            <i class="fa-solid fa-floppy-disk"></i>&nbsp; Uložit změny
+        <!-- Potvrzení smazání -->
+        <div id="edit-delete-confirm" class="edit-delete-confirm is-hidden mb-4">
+          <p class="mb-1">
+            🗑️ Opravdu smazat <strong id="edit-delete-id">—</strong> z databáze?
+          </p>
+          <p class="edit-hint mb-3">
+            Nejde to vrátit. Fotky zůstanou na Cloudinary a ID se uvolní –
+            appka ho pak může přidělit dalšímu produktu.
+          </p>
+          <div class="buttons is-right">
+            <button type="button" id="edit-delete-no" class="button is-small is-rounded">
+              Ne, nechat
+            </button>
+            <button type="button" id="edit-delete-yes" class="button is-small is-danger is-rounded">
+              Ano, smazat
+            </button>
+          </div>
+        </div>
+
+        <div class="edit-modal-buttons">
+          <button type="button" id="edit-delete-btn" class="button is-danger is-light is-rounded">
+            <i class="fa-solid fa-trash-can"></i>&nbsp; Smazat
           </button>
+          <span class="edit-modal-buttons-right">
+            <button type="button" id="edit-cancel-btn" class="button is-rounded">Zrušit</button>
+            <button type="button" id="edit-save-btn" class="button is-success is-rounded">
+              <i class="fa-solid fa-floppy-disk"></i>&nbsp; Uložit změny
+            </button>
+          </span>
         </div>
       </div>
     </div>
