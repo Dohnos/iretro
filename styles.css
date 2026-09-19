@@ -419,6 +419,121 @@ select {
   font-family: monospace;
 }
 
+/* --------------------------------------------------------------------------
+   Režim přidávání (fotím teď / zpětně) + zpětné datum
+   -------------------------------------------------------------------------- */
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--border-radius-md);
+  padding: 0.75rem 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  user-select: none;
+}
+.mode-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.mode-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.mode-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+.mode-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.25;
+}
+.mode-card:has(input[type="radio"]:checked) {
+  background: rgba(255, 210, 29, 0.06);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 12px rgba(255, 210, 29, 0.15);
+}
+.mode-card:has(input[type="radio"]:checked) .mode-title {
+  color: var(--accent-color);
+}
+
+/* Nativní kalendář v tmavém motivu */
+input[type="date"].input {
+  color-scheme: dark;
+}
+html[data-theme="light"] input[type="date"].input {
+  color-scheme: light;
+}
+
+/* Připomínka zpětného data v kroku s detaily */
+.retro-badge {
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: var(--border-radius-md);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Náhledy vybraných fotek
+   -------------------------------------------------------------------------- */
+.photo-preview {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.photo-preview:empty {
+  display: none;
+}
+.photo-preview-item {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+}
+.photo-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: none;
+  border-radius: 50%;
+  background: rgba(11, 15, 23, 0.75);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: var(--transition-smooth);
+}
+.photo-remove-btn:hover {
+  background: var(--danger-color);
+}
+
 /* Modals styling */
 .modal-background {
   background-color: rgba(11, 15, 23, 0.8) !important;

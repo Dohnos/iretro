@@ -19,13 +19,42 @@ let productIdNum = 0;         // číselná část, např. 1
 let productIdWidth = 2;       // šířka číselné části pro doplnění nul
 
 /* ---------------------------------
+   Režim přidávání
+   "live"  = produkt fotím právě teď
+   "retro" = fotky už mám v mobilu a produkty
+             zadávám zpětně (s vlastním datem)
+-----------------------------------*/
+let entryMode = "live";
+let retroDateStr = ""; // YYYY-MM-DD; prázdné = doplní se z data fotky
+
+// V zpětném režimu stačí aspoň 1 fotka, v reálném čase chceme všechny 3.
+const MAX_PHOTOS = 3;
+function minPhotosRequired() {
+  return isRetroMode() ? 1 : MAX_PHOTOS;
+}
+function isRetroMode() {
+  return entryMode === "retro";
+}
+
+/* ---------------------------------
    DOM prvky
 -----------------------------------*/
 const startProductIdInput = document.getElementById("start-product-id");
 const lastIdDisplay = document.getElementById("last-id-display");
 const photoInput = document.getElementById("photo-input");
+const galleryInput = document.getElementById("gallery-input");
 const takePhotoBtn = document.getElementById("take-photo-btn");
+const pickPhotoBtn = document.getElementById("pick-photo-btn");
 const photoCountElem = document.getElementById("photo-count");
+const photoCountLabel = document.getElementById("photo-count-label");
+const photoStepTitle = document.getElementById("photo-step-title");
+const photoPreview = document.getElementById("photo-preview");
+
+const modeLiveRadio = document.getElementById("mode-live");
+const modeRetroRadio = document.getElementById("mode-retro");
+const retroDateField = document.getElementById("retro-date-field");
+const retroDateInput = document.getElementById("retro-date");
+const retroBadge = document.getElementById("retro-badge");
 const statusElem = document.getElementById("status");
 const dailyCountElem = document.getElementById("daily-count");
 
@@ -447,23 +476,67 @@ function cropImageInteractive(file, label) {
 }
 
 
-// Vrátí YYYY-MM-DD
+// Vrátí YYYY-MM-DD (lokální datum, ne UTC – jinak by se po půlnoci UTC
+// posouval den)
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 function getTodayDateString() {
-  const now = new Date();
-  return now.toISOString().split("T")[0];
+  return toDateString(new Date());
 }
 
-// Aktualizace denního počtu přidaných produktů
+// "2025-03-26" -> "26. 3. 2025"
+function formatDateCz(dateStr) {
+  const d = new Date(`${dateStr}T12:00:00`);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString("cs-CZ");
+}
+
+// Datum, se kterým se produkt uloží – u zpětného zadání vybrané,
+// jinak dnešní.
+function getEffectiveDateString() {
+  if (isRetroMode() && retroDateStr) return retroDateStr;
+  return getTodayDateString();
+}
+
+// created_at pro databázi. U zpětného zadání použijeme vybrané datum
+// (poledne), aby dashboard produkt zobrazil i seřadil ke správnému dni.
+function getEffectiveCreatedAtISO() {
+  if (isRetroMode() && retroDateStr) {
+    const d = new Date(`${retroDateStr}T12:00:00`);
+    if (!isNaN(d)) return d.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+// Datum pořízení fotky (z metadat souboru) – použije se jako návrh
+// data při zpětném zadávání.
+function fileDateString(file) {
+  if (!file || !file.lastModified) return null;
+  const d = new Date(file.lastModified);
+  if (isNaN(d)) return null;
+  return toDateString(d);
+}
+
+// Aktualizace počtu přidaných produktů (u zpětného zadání k vybranému datu)
 function updateDailyCountDisplay() {
   const products = JSON.parse(localStorage.getItem("products")) || [];
-  const todayStr = getTodayDateString();
+  const dateStr = getEffectiveDateString();
   let dailyCount = 0;
   products.forEach((p) => {
-    if (p.dateAdded === todayStr) {
+    if (p.dateAdded === dateStr) {
       dailyCount++;
     }
   });
-  dailyCountElem.textContent = `(Dnes přidáno: ${dailyCount} produktů)`;
+  if (isRetroMode() && retroDateStr) {
+    dailyCountElem.textContent =
+      `(K datu ${formatDateCz(dateStr)} přidáno: ${dailyCount} produktů)`;
+  } else {
+    dailyCountElem.textContent = `(Dnes přidáno: ${dailyCount} produktů)`;
+  }
 }
 
 // Zobrazí historii umístění
@@ -493,8 +566,129 @@ function closeModal(modalElem) {
 
 
 /* ---------------------------------
+   Režim přidávání (fotím teď / zpětně)
+   – volba se pamatuje v localStorage,
+     takže při zpětném zadávání více
+     produktů se nastavuje jen jednou.
+-----------------------------------*/
+function saveEntryModeState() {
+  localStorage.setItem(
+    "entryModeState",
+    JSON.stringify({ mode: entryMode, date: retroDateStr })
+  );
+}
+
+// Popisky a viditelnost prvků podle zvoleného režimu
+function applyEntryModeUI() {
+  const retro = isRetroMode();
+
+  if (modeLiveRadio) modeLiveRadio.checked = !retro;
+  if (modeRetroRadio) modeRetroRadio.checked = retro;
+  if (retroDateField) retroDateField.classList.toggle("is-hidden", !retro);
+  if (retroDateInput) {
+    retroDateInput.max = getTodayDateString();
+    if (retroDateInput.value !== retroDateStr) retroDateInput.value = retroDateStr;
+  }
+
+  if (photoStepTitle) {
+    photoStepTitle.textContent = retro ? "1️⃣ Vyber fotky" : "1️⃣ Nafoť fotky";
+  }
+  if (photoCountLabel) {
+    photoCountLabel.textContent = retro ? "Vybráno:" : "Nafoceno:";
+  }
+  if (takePhotoBtn) {
+    // Ve zpětném režimu je hlavní cesta galerie, focení necháme jako doplněk.
+    takePhotoBtn.classList.toggle("is-success", !retro);
+    takePhotoBtn.classList.toggle("is-light", retro);
+  }
+  if (pickPhotoBtn) {
+    pickPhotoBtn.classList.toggle("is-info", retro);
+    pickPhotoBtn.classList.toggle("is-light", !retro);
+  }
+
+  if (retroBadge) {
+    if (retro) {
+      retroBadge.classList.remove("is-hidden");
+      retroBadge.innerHTML = retroDateStr
+        ? `🕓 Zpětné zadání – produkt se uloží k datu <strong>${formatDateCz(retroDateStr)}</strong>.`
+        : "🕓 Zpětné zadání – datum se doplní podle první fotky.";
+    } else {
+      retroBadge.classList.add("is-hidden");
+      retroBadge.innerHTML = "";
+    }
+  }
+
+  updatePhotoCountDisplay();
+  updateDailyCountDisplay();
+}
+
+function setEntryMode(mode, { silent = false } = {}) {
+  entryMode = mode === "retro" ? "retro" : "live";
+  if (!isRetroMode()) retroDateStr = "";
+  saveEntryModeState();
+  applyEntryModeUI();
+  if (!silent) {
+    updateStatus(
+      isRetroMode()
+        ? "🕓 Zpětné zadání zapnuto – vyber datum a pak fotky z galerie."
+        : "📷 Režim focení v reálném čase."
+    );
+  }
+}
+
+function setRetroDate(value) {
+  const today = getTodayDateString();
+  // Do budoucna zpětně přidávat nejde – datum ořízneme na dnešek.
+  retroDateStr = value && value > today ? today : (value || "");
+  saveEntryModeState();
+  applyEntryModeUI();
+}
+
+function initEntryMode() {
+  // 1) odkaz s ?rezim=zpetne (např. z dashboardu) má přednost
+  let mode = null;
+  try {
+    const param = new URLSearchParams(window.location.search).get("rezim");
+    if (param === "zpetne" || param === "retro") mode = "retro";
+    if (param === "live" || param === "teď" || param === "ted") mode = "live";
+  } catch (e) {
+    /* starší prohlížeč – ignorujeme */
+  }
+
+  // 2) jinak poslední použitá volba
+  const saved = JSON.parse(localStorage.getItem("entryModeState") || "null");
+  if (!mode && saved && saved.mode) mode = saved.mode;
+  entryMode = mode === "retro" ? "retro" : "live";
+  retroDateStr = isRetroMode() && saved && saved.date ? saved.date : "";
+
+  applyEntryModeUI();
+}
+
+if (modeLiveRadio) {
+  modeLiveRadio.addEventListener("change", () => {
+    if (modeLiveRadio.checked) setEntryMode("live");
+  });
+}
+if (modeRetroRadio) {
+  modeRetroRadio.addEventListener("change", () => {
+    if (modeRetroRadio.checked) setEntryMode("retro");
+  });
+}
+if (retroDateInput) {
+  retroDateInput.addEventListener("change", () => {
+    setRetroDate(retroDateInput.value);
+    updateStatus(
+      retroDateStr
+        ? `🕓 Produkty se uloží k datu ${formatDateCz(retroDateStr)}.`
+        : "🕓 Datum se doplní podle první vybrané fotky."
+    );
+  });
+}
+
+/* ---------------------------------
    Inicializace
 -----------------------------------*/
+initEntryMode();
 updateStatus("👉 Začni zadáním ID produktu");
 updateDailyCountDisplay();
 updateStepProgressBar(0);
@@ -606,56 +800,131 @@ async function checkStartIdFree(parsed) {
 window.onAuthReady(loadLastProductId);
 
 /* ---------------------------------
-   Focení 3 fotek
+   Fotky (focení i výběr z galerie)
 -----------------------------------*/
+function updatePhotoCountDisplay() {
+  if (photoCountElem) photoCountElem.textContent = `${photos.length}/${MAX_PHOTOS}`;
+  if (takePhotoBtn) takePhotoBtn.disabled = photos.length >= MAX_PHOTOS;
+  if (pickPhotoBtn) pickPhotoBtn.disabled = photos.length >= MAX_PHOTOS;
+  renderPhotoPreview();
+}
+
+// Náhledy vybraných fotek – hlavně pro zpětné zadání, ať je vidět,
+// co se z galerie vybralo, a jde to opravit.
+function renderPhotoPreview() {
+  if (!photoPreview) return;
+  photoPreview.innerHTML = "";
+  photos.forEach((file, index) => {
+    const item = document.createElement("div");
+    item.className = "photo-preview-item";
+
+    const img = document.createElement("img");
+    img.alt = `Fotka ${index + 1}`;
+    img.src = URL.createObjectURL(file);
+    img.onload = () => URL.revokeObjectURL(img.src);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "photo-remove-btn";
+    removeBtn.title = "Odebrat fotku";
+    removeBtn.innerHTML = "&times;";
+    removeBtn.addEventListener("click", () => removePhoto(index));
+
+    item.appendChild(img);
+    item.appendChild(removeBtn);
+    photoPreview.appendChild(item);
+  });
+}
+
+function removePhoto(index) {
+  photos.splice(index, 1);
+  updatePhotoCountDisplay();
+  updateStatus(`🗑️ Fotka odebrána (zbývá ${photos.length}/${MAX_PHOTOS}).`);
+}
+
+// Zpracuje vybrané soubory – z fotoaparátu i z galerie.
+async function handleSelectedPhotos(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+
+  // Zpětné zadání: když datum ještě není vybrané, vezmeme ho z první fotky.
+  if (isRetroMode() && !retroDateStr) {
+    const fromFile = fileDateString(files[0]);
+    if (fromFile) {
+      setRetroDate(fromFile);
+      updateStatus(`🕓 Datum doplněno podle fotky: ${formatDateCz(retroDateStr)}`);
+    }
+  }
+
+  for (let i = 0; i < files.length; i++) {
+    if (photos.length >= MAX_PHOTOS) {
+      updateStatus(`ℹ️ Na produkt jdou max. ${MAX_PHOTOS} fotky – zbytek přeskočen.`);
+      break;
+    }
+    const label = `Foto ${photos.length + 1} / ${MAX_PHOTOS}`;
+    updateStatus(`✂️ Uprav ořez fotky č. ${photos.length + 1}...`);
+    const processedFile = await cropImageInteractive(files[i], label);
+    if (processedFile) {
+      photos.push(processedFile);
+      updateStatus(`📸 Načtena fotka č. ${photos.length}.`);
+    } else {
+      updateStatus("🚫 Fotka byla zrušena. Zkus to znovu.");
+    }
+    updatePhotoCountDisplay();
+  }
+
+  updatePhotoCountDisplay();
+
+  // Jakmile máme všechny fotky, automaticky přejdeme na detaily
+  if (photos.length === MAX_PHOTOS) {
+    updateStatus("✅ Fotky byly úspěšně načteny. Teď detail.");
+    photoSectionSection.classList.add("is-hidden");
+    productDetailsSection.classList.remove("is-hidden");
+    updateLocationHistory();
+    updateStepProgressBar(2);
+  } else if (photos.length >= minPhotosRequired()) {
+    updateStatus(
+      `📸 Máš ${photos.length}/${MAX_PHOTOS} fotek. Můžeš přidat další, nebo jít tlačítkem „Dál“ na detaily.`
+    );
+  } else if (photos.length > 0) {
+    updateStatus(`📸 Načtena fotka ${photos.length}/${MAX_PHOTOS}. Pokračuj další.`);
+  }
+}
+
 takePhotoBtn.addEventListener("click", () => {
-  if (photos.length < 3) {
+  if (photos.length < MAX_PHOTOS) {
     photoInput.click();
   } else {
-    updateStatus("✅ Máš už 3 fotky! Vyplň název a cenu.");
+    updateStatus(`✅ Máš už ${MAX_PHOTOS} fotky! Vyplň název a cenu.`);
   }
 });
 
-// Jakmile uživatel vybere soubory
+if (pickPhotoBtn) {
+  pickPhotoBtn.addEventListener("click", () => {
+    if (photos.length < MAX_PHOTOS) {
+      galleryInput.click();
+    } else {
+      updateStatus(`✅ Máš už ${MAX_PHOTOS} fotky! Vyplň název a cenu.`);
+    }
+  });
+}
+
+// Jakmile uživatel vybere soubory (fotoaparát i galerie)
 photoInput.addEventListener("change", async () => {
-  if (photoInput.files.length) {
-    // Projdeme všechny vybrané soubory (u mobilu často jen 1)
-    for (let i = 0; i < photoInput.files.length; i++) {
-      if (photos.length >= 3) break;
-      const originalFile = photoInput.files[i];
-      const label = `Foto ${photos.length + 1} / 3`;
-      updateStatus(`✂️ Uprav ořez fotky č. ${photos.length + 1}...`);
-      const processedFile = await cropImageInteractive(originalFile, label);
-      if (processedFile) {
-        photos.push(processedFile);
-        updateStatus(`📸 Načtena fotka č. ${photos.length}.`);
-      } else {
-        updateStatus("🚫 Fotka byla zrušena. Zkus to znovu.");
-      }
-    }
-
-    // Vynulujeme input, aby šlo vybrat stejnou fotku znovu
-    photoInput.value = "";
-
-    // Aktualizace počítadla fotek
-    photoCountElem.textContent = `${photos.length}/3`;
-
-    // Jakmile máme 3 fotky, automaticky přejít na krok 2 + zpráva
-    if (photos.length === 3) {
-      updateStatus("✅ Fotky byly úspěšně načteny. Teď detail.");
-      // Skryjeme focení a otevřeme detaily
-      photoSectionSection.classList.add("is-hidden");
-      productDetailsSection.classList.remove("is-hidden");
-      takePhotoBtn.disabled = true;
-      updateLocationHistory();
-      updateStepProgressBar(2);
-    } else if (photos.length > 0) {
-      updateStatus(
-        `📸 Nafocena fotka ${photos.length}/3. Pokračuj další.`
-      );
-    }
-  }
+  const files = photoInput.files;
+  // Vynulujeme input, aby šlo vybrat stejnou fotku znovu
+  const picked = Array.from(files || []);
+  photoInput.value = "";
+  await handleSelectedPhotos(picked);
 });
+
+if (galleryInput) {
+  galleryInput.addEventListener("change", async () => {
+    const picked = Array.from(galleryInput.files || []);
+    galleryInput.value = "";
+    await handleSelectedPhotos(picked);
+  });
+}
 
 /* ---------------------------------
    Výběr kategorie
@@ -790,6 +1059,14 @@ async function addProduct() {
     updateStatus('⚠️ Vyplň všechna povinná pole!');
     return;
   }
+  if (photos.length < minPhotosRequired()) {
+    updateStatus(
+      isRetroMode()
+        ? '⚠️ Vyber aspoň jednu fotku produktu!'
+        : `⚠️ Nafoť ${MAX_PHOTOS} fotky, než produkt přidáš!`
+    );
+    return;
+  }
 
   updateStatus("⏳ Zpracovávám a nahrávám fotky...");
   progressBar.classList.remove("is-hidden");
@@ -798,12 +1075,12 @@ async function addProduct() {
   try {
     const photoUrls = [];
     for (let i = 0; i < photos.length; i++) {
-      updateStatus(`🖼️ Nahrávám obrázek ${i + 1}/3...`);
+      updateStatus(`🖼️ Nahrávám obrázek ${i + 1}/${photos.length}...`);
       const url = await uploadFile(photos[i], i + 1);
       photoUrls.push(url);
       const percent = Math.round(((i + 1) / photos.length) * 100);
       progressBar.value = percent;
-      updateStatus(`📤 Nahrán obrázek ${i + 1}/3...`);
+      updateStatus(`📤 Nahrán obrázek ${i + 1}/${photos.length}...`);
     }
 
     // Uložení umístění do localStorage (kvůli historii)
@@ -831,7 +1108,9 @@ async function addProduct() {
 
     const productId = currentProductId;
     const formattedName = `${name.toUpperCase()} | ${productId}`;
-    const todayStr = getTodayDateString();
+    // U zpětného zadání se uloží vybrané datum, jinak dnešek.
+    const addedDateStr = getEffectiveDateString();
+    const createdAtIso = getEffectiveCreatedAtISO();
 
     const product = {
       entityId: lastEntityId,
@@ -863,7 +1142,9 @@ async function addProduct() {
       priorityListing: document.getElementById("promo-priority").checked,
       boldTitle: document.getElementById("promo-bold").checked,
       highlight: document.getElementById("promo-highlight").checked,
-      dateAdded: todayStr,
+      dateAdded: addedDateStr,
+      createdAt: createdAtIso,
+      entryMode: entryMode,
       productId: productId,
       locationName: location
     };
@@ -877,7 +1158,7 @@ async function addProduct() {
 
     // Reset fotek a formuláře
     photos = [];
-    photoCountElem.textContent = "0/3";
+    updatePhotoCountDisplay();
     document.getElementById("product-name").value = "";
     document.getElementById("product-price").value = "";
     document.getElementById("product-location").value = "";
@@ -890,10 +1171,13 @@ async function addProduct() {
 
     productDetailsSection.classList.add("is-hidden");
     finishSection.classList.remove("is-hidden");
-    takePhotoBtn.disabled = false;
     updateStepProgressBar(3);
 
-    updateStatus("🎉 Produkt přidán! Můžeš dokončit nebo přidat další.");
+    updateStatus(
+      isRetroMode() && retroDateStr
+        ? `🎉 Produkt přidán k datu ${formatDateCz(addedDateStr)}! Můžeš uložit do DB nebo přidat další.`
+        : "🎉 Produkt přidán! Můžeš dokončit nebo přidat další."
+    );
   } catch (error) {
     updateStatus(`❌ Chyba při nahrávání fotek: ${error.message}`);
   }
@@ -908,7 +1192,7 @@ function addAnotherProduct() {
 
   // Reset formuláře pro nový produkt
   photos = [];
-  photoCountElem.textContent = "0/3";
+  updatePhotoCountDisplay();
   document.getElementById("product-name").value = "";
   document.getElementById("product-price").value = "";
   document.getElementById("product-location").value = "";
@@ -918,7 +1202,6 @@ function addAnotherProduct() {
   document.getElementById("promo-priority").checked = false;
   document.getElementById("promo-bold").checked = false;
   document.getElementById("promo-highlight").checked = false;
-  takePhotoBtn.disabled = false;
 
   // Reset historie pro nový produkt
   ['product-name', 'product-price', 'product-location'].forEach(id => {
@@ -929,7 +1212,11 @@ function addAnotherProduct() {
   productDetailsSection.classList.add("is-hidden");
   photoSectionSection.classList.remove("is-hidden");
   updateStepProgressBar(1);
-  updateStatus("👉 Nafoť fotky pro další produkt.");
+  updateStatus(
+    isRetroMode()
+      ? "👉 Vyber fotky dalšího produktu z galerie."
+      : "👉 Nafoť fotky pro další produkt."
+  );
 }
 
 /* ---------------------------------
@@ -1147,7 +1434,10 @@ async function syncProductsToFirestore(products, excelUrl) {
           sold_at: null,
           raw: p, // celý produkt pro pozdější re-export ve formátu pro Aukro
           date_added: p.dateAdded,
-          created_at: new Date().toISOString()
+          // U zpětně zadaných produktů je to datum, které si uživatel vybral,
+          // ať je v dashboardu produkt vidět u správného dne.
+          created_at: p.createdAt || new Date().toISOString(),
+          entry_mode: p.entryMode || "live"
         });
       });
       await batch.commit();
@@ -1174,6 +1464,42 @@ async function syncProductsToFirestore(products, excelUrl) {
 }
 
 /* ---------------------------------
+   Uložení do databáze bez Excelu
+   – pro ruční / zpětné zadávání, kdy
+     nechceš generovat Excel ani posílat
+     nic přes WhatsApp. Excel jde kdykoli
+     později vyexportovat z dashboardu.
+-----------------------------------*/
+async function saveToDatabase() {
+  const products = JSON.parse(localStorage.getItem("products")) || [];
+  const savedProductsDiv = document.getElementById("saved-products");
+
+  if (!products.length) {
+    updateStatus("⚠️ Nejdřív přidej aspoň jeden produkt.");
+    return;
+  }
+
+  const pending = products.filter((p) => !p.syncedToDb);
+  if (!pending.length) {
+    updateStatus("ℹ️ Všechny přidané produkty už v databázi jsou.");
+    return;
+  }
+
+  const saveBtn = document.getElementById("save-db-btn");
+  if (saveBtn) saveBtn.classList.add("is-loading");
+  await syncProductsToFirestore(pending, null);
+  if (saveBtn) saveBtn.classList.remove("is-loading");
+
+  // Po zápisu se změnilo poslední použité ID – načteme znovu.
+  loadLastProductId();
+
+  if (savedProductsDiv) {
+    savedProductsDiv.innerHTML =
+      `<p>Produkty jsou v databázi – najdeš je v <a href="dashboard.html">dashboardu</a>. Excel si odtamtud můžeš vyexportovat kdykoli později.</p>`;
+  }
+}
+
+/* ---------------------------------
    Reset úložiště
 -----------------------------------*/
 async function resetStorage() {
@@ -1181,13 +1507,16 @@ async function resetStorage() {
   if (!confirmed) return;
 
   localStorage.clear();
+  // Zvolený režim (vč. zpětného data) si necháme – mazání dat neznamená,
+  // že uživatel přestal zadávat zpětně.
+  saveEntryModeState();
   photos = [];
   currentProductId = null;
   productIdPrefix = "";
   productIdNum = 0;
   productIdWidth = 2;
   if (startProductIdInput) startProductIdInput.value = "";
-  photoCountElem.textContent = "0/3";
+  updatePhotoCountDisplay();
   document.getElementById("product-name").value = "";
   document.getElementById("product-price").value = "";
   document.getElementById("product-location").value = "";
@@ -1204,9 +1533,9 @@ async function resetStorage() {
   photoSectionSection.classList.add("is-hidden");
   finishSection.classList.add("is-hidden");
   shopSelectionSection.classList.remove("is-hidden");
-  takePhotoBtn.disabled = false;
   document.getElementById("saved-products").innerHTML = "";
   updateStepProgressBar(0);
+  applyEntryModeUI();
 
   updateStatus("🧹 Data byla vymazána! Začni znovu.");
   loadLastProductId();
@@ -1246,10 +1575,19 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
         }
         setProductIdState(parsed.prefix, parsed.num, parsed.width);
       }
-      // Kontrola 3 fotek při přechodu z kroku 1
-      if (currentStep === 1 && isNext && photos.length < 3) {
-        updateStatus("⚠️ Musíš nafotit 3 fotky, než přejdeš dál!");
+      // Kontrola fotek při přechodu z kroku 1
+      // (zpětné zadání: stačí aspoň jedna, jinak chceme všechny 3)
+      if (currentStep === 1 && isNext && photos.length < minPhotosRequired()) {
+        updateStatus(
+          isRetroMode()
+            ? "⚠️ Vyber aspoň jednu fotku, než přejdeš dál!"
+            : `⚠️ Musíš nafotit ${MAX_PHOTOS} fotky, než přejdeš dál!`
+        );
         return;
+      }
+      // Při přechodu na fotky ještě zaktualizujeme popisky podle režimu
+      if (currentStep === 0 && isNext) {
+        applyEntryModeUI();
       }
       // Kontrola vyplnění při přechodu z kroku 2
       if (currentStep === 2 && isNext) {

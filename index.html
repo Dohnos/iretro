@@ -76,6 +76,35 @@
           0️⃣ Zadej ID produktu
         </p>
 
+        <!-- Režim přidávání: fotím teď vs. zpětné zadání ze starších fotek -->
+        <div class="field mb-4">
+          <label class="label">Jak produkty přidáváš?</label>
+          <div class="mode-switch">
+            <label class="mode-card" for="mode-live">
+              <input type="radio" name="entry-mode" id="mode-live" value="live" checked />
+              <span class="mode-title">📷 Fotím teď</span>
+              <span class="mode-desc">Focení v reálném čase</span>
+            </label>
+            <label class="mode-card" for="mode-retro">
+              <input type="radio" name="entry-mode" id="mode-retro" value="retro" />
+              <span class="mode-title">🕓 Zpětně</span>
+              <span class="mode-desc">Fotky už mám v mobilu</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Datum pro zpětné zadání -->
+        <div id="retro-date-field" class="field mb-4 is-hidden">
+          <label for="retro-date" class="label">Datum přidání (zpětně)</label>
+          <div class="control has-relative">
+            <input id="retro-date" type="date" class="input is-rounded" />
+          </div>
+          <p class="help">
+            Uloží se do databáze místo dnešního data. Necháš-li prázdné, doplní se
+            datum pořízení první vybrané fotky.
+          </p>
+        </div>
+
         <!-- Poslední použité ID (z databáze) -->
         <div class="field mb-4">
           <label class="label">Poslední použité ID</label>
@@ -125,26 +154,39 @@
 
       <!-- Krok 1: Focení -->
       <div id="photo-section" class="box is-rounded step mb-5 is-hidden">
-        <p class="title is-5 mb-4">
+        <p class="title is-5 mb-4" id="photo-step-title">
           1️⃣ Nafoť fotky
         </p>
 
         <button
           id="take-photo-btn"
-          class="button is-success is-fullwidth is-rounded"
+          class="button is-success is-fullwidth is-rounded mb-2"
         >
           <span class="icon">
             <i class="fa-solid fa-camera"></i>
           </span>
           <span>Nafoť fotku</span>
         </button>
+        <button
+          id="pick-photo-btn"
+          class="button is-info is-fullwidth is-rounded"
+        >
+          <span class="icon">
+            <i class="fa-solid fa-images"></i>
+          </span>
+          <span>Vybrat fotky z galerie</span>
+        </button>
         <p class="has-text-centered mt-3 mb-0">
           <small>
-            Nafoceno: 
+            <span id="photo-count-label">Nafoceno:</span>
             <span id="photo-count">0/3</span> (celkem 3 fotky)
             <i class="fa-solid fa-images"></i>
           </small>
         </p>
+
+        <!-- Náhledy vybraných fotek (lze je jednotlivě odebrat) -->
+        <div id="photo-preview" class="photo-preview mt-3"></div>
+
         <input
           type="file"
           id="photo-input"
@@ -152,7 +194,14 @@
           capture="camera"
           class="is-hidden"
         />
-        
+        <input
+          type="file"
+          id="gallery-input"
+          accept="image/*"
+          multiple
+          class="is-hidden"
+        />
+
         <!-- Tlačítka dole: Zpět a Dál -->
         <div class="is-clearfix mt-4">
           <div class="is-pulled-left">
@@ -179,7 +228,10 @@
         <p class="title is-5 mb-4">
           2️⃣ Vyplň detaily
         </p>
-        
+
+        <!-- Připomínka, že se produkt ukládá se zpětným datem -->
+        <div id="retro-badge" class="retro-badge mb-4 is-hidden"></div>
+
         <!-- Název -->
         <div class="field mb-4">
           <label for="product-name" class="label">Název</label>
@@ -342,6 +394,16 @@
             <i class="fa-solid fa-plus-circle"></i>
           </span>
           <span>Přidat další produkt</span>
+        </button>
+        <button
+          id="save-db-btn"
+          class="button is-success is-fullwidth is-rounded mb-2"
+          onclick="saveToDatabase()"
+        >
+          <span class="icon">
+            <i class="fa-solid fa-database"></i>
+          </span>
+          <span>Uložit do databáze (bez Excelu)</span>
         </button>
         <button
           id="finish-btn"

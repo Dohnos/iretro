@@ -91,6 +91,26 @@ Nejdřív se přihlásíš (Firebase Auth). Pak projdi appku
 (zadej ID → 3 fotky → detaily → **Přidat produkt** → **Odeslat**).
 Produkt musí naskočit v **dashboardu**. 🎉
 
+## 🕓 Zpětné (ruční) přidávání produktů
+Když **fotky už máš nafocené** a produkty chceš do databáze doplnit až potom,
+přepni v kroku 0 přepínač na **🕓 Zpětně** (nebo použij odkaz
+**„Přidat zpětně“** v dashboardu, který na něj rovnou skočí).
+
+Co se v tomhle režimu změní:
+- **Fotky z galerie** – tlačítko *Vybrat fotky z galerie* nabídne rovnou výběr
+  více fotek najednou (focení zůstává jako druhá možnost). Vybrané fotky vidíš
+  jako náhledy a můžeš je jednotlivě odebrat.
+- **Datum přidání** – vyplníš vlastní datum, nebo se doplní automaticky podle
+  data pořízení první vybrané fotky. Uloží se do databáze (`date_added`
+  i `created_at`), takže produkt je v dashboardu u správného dne.
+- **Stačí 1 fotka** – nemusíš mít všechny 3 (v režimu focení jsou 3 dál povinné).
+- **Uložit do databáze (bez Excelu)** – v posledním kroku přibylo tlačítko,
+  které produkty jen zapíše do Firestore, bez generování Excelu a odesílání
+  přes WhatsApp. Excel si pak kdykoli vyexportuješ z dashboardu.
+
+ID produktů se chovají stejně jako při focení – navazují na nejvyšší už použité
+ID a nejde je použít podruhé.
+
 ## 8️⃣ Nahraj na GitHub a deploy na Vercel 🚀
 ```bash
 git add .
