@@ -1,6 +1,7 @@
 /* ---------------------------------
    Přepínač světlý / tmavý režim
    Sdílené pro index.html i dashboard.html.
+   Ikony bere z icons.js (musí být načtený dřív).
    Volba se ukládá do localStorage ("theme").
 -----------------------------------*/
 (function () {
@@ -24,7 +25,7 @@
 
     function refreshLabel() {
       const dark = document.documentElement.getAttribute("data-theme") === "dark";
-      btn.innerHTML = dark ? "☀️" : "🌙";
+      btn.innerHTML = window.icon(dark ? "sun" : "moon");
       btn.setAttribute("aria-label", dark ? "Zapnout světlý režim" : "Zapnout tmavý režim");
     }
     refreshLabel();

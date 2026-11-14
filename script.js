@@ -4,11 +4,15 @@
 const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/drrzl7evt/auto/upload";
 const CLOUDINARY_UPLOAD_PRESET = "Retroaukce";
 
+// Výchozí doprava (ZS or BA). Po každém produktu se výběr vrací sem.
+const DEFAULT_SHIPPING_ID = "2438895";
+
 /* ---------------------------------
    Proměnné
 -----------------------------------*/
 let photos = [];
 let categories = [];
+let currentStep = 0; // 0 = ID, 1 = fotky, 2 = detaily, 3 = hotovo
 
 /* ---------------------------------
    ID produktu (nahrazuje výběr obchodu)
@@ -27,10 +31,12 @@ let productIdWidth = 2;       // šířka číselné části pro doplnění nul
 let entryMode = "live";
 let retroDateStr = ""; // YYYY-MM-DD; prázdné = doplní se z data fotky
 
-// V zpětném režimu stačí aspoň 1 fotka, v reálném čase chceme všechny 3.
-const MAX_PHOTOS = 3;
+// Fotky: při focení jsou povinné 3, ve zpětném režimu stačí 1.
+// Nad povinný počet jde přidat další, až do MAX_PHOTOS.
+const BASE_PHOTOS = 3;
+const MAX_PHOTOS = 12;
 function minPhotosRequired() {
-  return isRetroMode() ? 1 : MAX_PHOTOS;
+  return isRetroMode() ? 1 : BASE_PHOTOS;
 }
 function isRetroMode() {
   return entryMode === "retro";
@@ -47,8 +53,12 @@ const takePhotoBtn = document.getElementById("take-photo-btn");
 const pickPhotoBtn = document.getElementById("pick-photo-btn");
 const photoCountElem = document.getElementById("photo-count");
 const photoCountLabel = document.getElementById("photo-count-label");
+const photoCountHint = document.getElementById("photo-count-hint");
 const photoStepTitle = document.getElementById("photo-step-title");
 const photoPreview = document.getElementById("photo-preview");
+const photoPreviewDetails = document.getElementById("photo-preview-details");
+const detailsPhotoCount = document.getElementById("details-photo-count");
+const productNoteInput = document.getElementById("product-note");
 
 const modeLiveRadio = document.getElementById("mode-live");
 const modeRetroRadio = document.getElementById("mode-retro");
@@ -56,6 +66,8 @@ const retroDateField = document.getElementById("retro-date-field");
 const retroDateInput = document.getElementById("retro-date");
 const retroBadge = document.getElementById("retro-badge");
 const statusElem = document.getElementById("status");
+const statusIconElem = document.getElementById("status-icon");
+const statusTextElem = document.getElementById("status-text");
 const dailyCountElem = document.getElementById("daily-count");
 
 const shopSelectionSection = document.getElementById("shop-selection");
@@ -99,14 +111,31 @@ window.loadCategoryGroups()
     categories = groups;
   })
   .catch((err) => {
-    updateStatus('❌ Chyba při načítání kategorií! Zkontroluj soubor.');
+    updateStatus('Chyba při načítání kategorií! Zkontroluj soubor.', "error");
   });
 
 /* ---------------------------------
    Pomocné funkce
 -----------------------------------*/
-function updateStatus(message) {
-  statusElem.textContent = message;
+// Typ určuje ikonu a důraz: info | success | warning | error | progress
+const STATUS_ICONS = {
+  info: "info",
+  success: "check-circle",
+  warning: "alert",
+  error: "x-circle",
+  progress: "loader"
+};
+function updateStatus(message, type = "info") {
+  const iconName = STATUS_ICONS[type] || STATUS_ICONS.info;
+  statusElem.dataset.type = type;
+  statusIconElem.innerHTML = window.icon(iconName, type === "progress" ? "spin" : "");
+  statusTextElem.textContent = message;
+
+  // Krátké „nadechnutí“, ať je vidět, že se zpráva změnila.
+  statusElem.classList.remove("is-fresh");
+  void statusElem.offsetWidth;
+  statusElem.classList.add("is-fresh");
+
   updateDailyCountDisplay();
 }
 
@@ -165,85 +194,38 @@ function ensurePortrait(file) {
    (čtverec 1:1, přesně jak to uloží
    Cloudinary po nahrání)
 -----------------------------------*/
-function injectCropModalStyles() {
-  if (document.getElementById("crop-modal-styles")) return;
-  const style = document.createElement("style");
-  style.id = "crop-modal-styles";
-  style.textContent = `
-    #crop-modal .crop-modal-box { max-width: 380px; margin: 0 auto; }
-    #crop-modal .crop-modal-title { font-weight: 600; margin-bottom: 2px; }
-    #crop-modal .crop-modal-subtitle { color: #888; margin-bottom: 10px; font-size: 0.9rem; }
-    #crop-viewport {
-      position: relative;
-      width: min(78vw, 320px);
-      aspect-ratio: 1 / 1;
-      margin: 0 auto 12px;
-      overflow: hidden;
-      border-radius: 8px;
-      background: #111;
-      touch-action: none;
-      cursor: grab;
-    }
-    #crop-viewport:active { cursor: grabbing; }
-    #crop-viewport img {
-      position: absolute;
-      top: 0;
-      left: 0;
-      max-width: none;
-      max-height: none;
-      user-select: none;
-      -webkit-user-drag: none;
-      pointer-events: none;
-    }
-    #crop-modal .crop-controls {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    #crop-modal .crop-controls input[type="range"] { flex: 1; }
-    #crop-modal .crop-hint {
-      font-size: 0.78rem;
-      color: #999;
-      text-align: center;
-      margin-bottom: 12px;
-    }
-    #crop-modal .crop-buttons {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
 function buildCropModal() {
   const existing = document.getElementById("crop-modal");
   if (existing) return existing;
 
-  injectCropModalStyles();
-
+  // Styly ořezu jsou ve styles.css (sekce „Ořez fotky“).
   const container = document.createElement("div");
   container.innerHTML = `
     <div class="modal" id="crop-modal">
       <div class="modal-background"></div>
-      <div class="modal-content crop-modal-box">
+      <div class="modal-content">
         <div class="box">
-          <p class="crop-modal-title">📸 Náhled ořezu (jak bude na Cloudinary)</p>
-          <p class="crop-modal-subtitle" id="crop-modal-subtitle"></p>
+          <p class="modal-title">Ořez fotky</p>
+          <p class="muted" id="crop-modal-subtitle"></p>
           <div id="crop-viewport">
             <img id="crop-image" draggable="false" alt="Náhled ořezu fotky" />
           </div>
           <div class="crop-controls">
-            <span>🔍</span>
-            <input type="range" id="crop-zoom-slider" min="1" max="4" step="0.01" value="1">
+            ${window.icon("search")}
+            <input type="range" id="crop-zoom-slider" min="1" max="4" step="0.01" value="1"
+                   aria-label="Přiblížení">
           </div>
-          <p class="crop-hint">👉 Táhni prstem pro posun, sliderem nebo gestem pro zoom.</p>
+          <p class="crop-hint">Táhni pro posun, sliderem nebo dvěma prsty přibliž.</p>
           <div class="crop-buttons">
-            <button type="button" class="button is-light" id="crop-reset-btn">↺ Reset</button>
-            <button type="button" class="button is-danger is-light" id="crop-cancel-btn">✖ Zrušit fotku</button>
-            <button type="button" class="button is-success" id="crop-confirm-btn">✔ Použít ořez</button>
+            <button type="button" class="btn btn--quiet btn--sm" id="crop-reset-btn">
+              ${window.icon("undo")} Reset
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm" id="crop-cancel-btn">
+              ${window.icon("x")} Zrušit
+            </button>
+            <button type="button" class="btn btn--sm" id="crop-confirm-btn">
+              ${window.icon("check")} Použít
+            </button>
           </div>
         </div>
       </div>
@@ -437,14 +419,16 @@ function cropImageInteractive(file, label) {
     reader.readAsDataURL(file);
 
     imgEl.onload = () => {
-      const vpRect = viewport.getBoundingClientRect();
+      // clientWidth, ne getBoundingClientRect: modál se při otevření animuje
+      // (scale) a změřená šířka by byla o pár pixelů menší než skutečná.
+      const vpSize = viewport.clientWidth;
       state = {
         natW: imgEl.naturalWidth,
         natH: imgEl.naturalHeight,
-        vpSize: vpRect.width,
+        vpSize: vpSize,
         baseScale: Math.max(
-          vpRect.width / imgEl.naturalWidth,
-          vpRect.width / imgEl.naturalHeight
+          vpSize / imgEl.naturalWidth,
+          vpSize / imgEl.naturalHeight
         ),
         zoom: 1,
         offX: 0,
@@ -521,24 +505,12 @@ function updateDailyCountDisplay() {
   }
 }
 
-// Zobrazí historii umístění
+// Zobrazí dříve použitá umístění (štítky pod polem)
 function updateLocationHistory() {
-  const locationHistoryDiv = document.getElementById("location-history");
-  const locations = JSON.parse(localStorage.getItem("locationHistory")) || [];
-  if (locations.length === 0) {
-    locationHistoryDiv.textContent = "Žádná historie umístění.";
-  } else {
-    const items = locations
-      .map(
-        (loc) =>
-          `<span class="has-text-link" style="cursor:pointer" onclick="document.getElementById('product-location').value='${loc}'">${loc}</span>`
-      )
-      .join(", ");
-    locationHistoryDiv.innerHTML = "Historie: " + items;
-  }
+  renderInputHistory("product-location");
 }
 
-// Otevření a zavření Bulma modálu
+// Otevření a zavření modálu
 function openModal(modalElem) {
   modalElem.classList.add("is-active");
 }
@@ -573,27 +545,27 @@ function applyEntryModeUI() {
   }
 
   if (photoStepTitle) {
-    photoStepTitle.textContent = retro ? "1️⃣ Vyber fotky" : "1️⃣ Nafoť fotky";
+    photoStepTitle.textContent = retro ? "Vyber fotky" : "Nafoť fotky";
   }
   if (photoCountLabel) {
     photoCountLabel.textContent = retro ? "Vybráno:" : "Nafoceno:";
   }
   if (takePhotoBtn) {
     // Ve zpětném režimu je hlavní cesta galerie, focení necháme jako doplněk.
-    takePhotoBtn.classList.toggle("is-success", !retro);
-    takePhotoBtn.classList.toggle("is-light", retro);
+    takePhotoBtn.classList.toggle("btn--ghost", retro);
   }
   if (pickPhotoBtn) {
-    pickPhotoBtn.classList.toggle("is-info", retro);
-    pickPhotoBtn.classList.toggle("is-light", !retro);
+    pickPhotoBtn.classList.toggle("btn--ghost", !retro);
   }
 
   if (retroBadge) {
     if (retro) {
       retroBadge.classList.remove("is-hidden");
-      retroBadge.innerHTML = retroDateStr
-        ? `🕓 Zpětné zadání – produkt se uloží k datu <strong>${formatDateCz(retroDateStr)}</strong>.`
-        : "🕓 Zpětné zadání – datum se doplní podle první fotky.";
+      retroBadge.innerHTML =
+        window.icon("history") +
+        (retroDateStr
+          ? `<span>Zpětné zadání – produkt se uloží k datu <strong>${formatDateCz(retroDateStr)}</strong>.</span>`
+          : "<span>Zpětné zadání – datum se doplní podle první fotky.</span>");
     } else {
       retroBadge.classList.add("is-hidden");
       retroBadge.innerHTML = "";
@@ -612,8 +584,8 @@ function setEntryMode(mode, { silent = false } = {}) {
   if (!silent) {
     updateStatus(
       isRetroMode()
-        ? "🕓 Zpětné zadání zapnuto – vyber datum a pak fotky z galerie."
-        : "📷 Režim focení v reálném čase."
+        ? "Zpětné zadání zapnuto – vyber datum a pak fotky z galerie."
+        : "Režim focení v reálném čase."
     );
   }
 }
@@ -661,8 +633,8 @@ if (retroDateInput) {
     setRetroDate(retroDateInput.value);
     updateStatus(
       retroDateStr
-        ? `🕓 Produkty se uloží k datu ${formatDateCz(retroDateStr)}.`
-        : "🕓 Datum se doplní podle první vybrané fotky."
+        ? `Produkty se uloží k datu ${formatDateCz(retroDateStr)}.`
+        : "Datum se doplní podle první vybrané fotky."
     );
   });
 }
@@ -671,7 +643,7 @@ if (retroDateInput) {
    Inicializace
 -----------------------------------*/
 initEntryMode();
-updateStatus("👉 Začni zadáním ID produktu");
+updateStatus("Začni zadáním ID produktu");
 updateDailyCountDisplay();
 updateStepProgressBar(0);
 
@@ -783,45 +755,86 @@ window.onAuthReady(loadLastProductId);
 
 /* ---------------------------------
    Fotky (focení i výběr z galerie)
+   Povinný počet je BASE_PHOTOS (ve zpětném
+   režimu 1), další jdou přidat až do
+   MAX_PHOTOS – i z kroku s detaily.
 -----------------------------------*/
 function updatePhotoCountDisplay() {
-  if (photoCountElem) photoCountElem.textContent = `${photos.length}/${MAX_PHOTOS}`;
-  if (takePhotoBtn) takePhotoBtn.disabled = photos.length >= MAX_PHOTOS;
-  if (pickPhotoBtn) pickPhotoBtn.disabled = photos.length >= MAX_PHOTOS;
+  const count = photos.length;
+  const full = count >= MAX_PHOTOS;
+  if (photoCountElem) photoCountElem.textContent = String(count);
+  if (photoCountHint) {
+    photoCountHint.textContent = `(min. ${minPhotosRequired()}, max. ${MAX_PHOTOS})`;
+  }
+  if (detailsPhotoCount) detailsPhotoCount.textContent = `${count} z max. ${MAX_PHOTOS}`;
+  if (takePhotoBtn) takePhotoBtn.disabled = full;
+  if (pickPhotoBtn) pickPhotoBtn.disabled = full;
   renderPhotoPreview();
 }
 
-// Náhledy vybraných fotek – hlavně pro zpětné zadání, ať je vidět,
-// co se z galerie vybralo, a jde to opravit.
+function buildPhotoTile(file, index) {
+  const item = document.createElement("div");
+  item.className = "photo-preview-item";
+
+  const img = document.createElement("img");
+  img.alt = `Fotka ${index + 1}`;
+  img.src = URL.createObjectURL(file);
+  img.onload = () => URL.revokeObjectURL(img.src);
+
+  const badge = document.createElement("span");
+  badge.className = "photo-index";
+  badge.textContent = String(index + 1);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "photo-remove-btn";
+  removeBtn.title = "Odebrat fotku";
+  removeBtn.innerHTML = window.icon("x");
+  removeBtn.addEventListener("click", () => removePhoto(index));
+
+  item.appendChild(img);
+  item.appendChild(badge);
+  item.appendChild(removeBtn);
+  return item;
+}
+
+function buildAddPhotoTile(iconName, label, onClick) {
+  const tile = document.createElement("button");
+  tile.type = "button";
+  tile.className = "photo-add-tile";
+  tile.innerHTML = window.icon(iconName) + `<span>${label}</span>`;
+  tile.addEventListener("click", onClick);
+  return tile;
+}
+
+// Náhledy se kreslí na dvou místech: v kroku fotek a v kroku s detaily.
+// V detailech k nim patří i dlaždice pro přidání dalších fotek.
 function renderPhotoPreview() {
-  if (!photoPreview) return;
-  photoPreview.innerHTML = "";
-  photos.forEach((file, index) => {
-    const item = document.createElement("div");
-    item.className = "photo-preview-item";
-
-    const img = document.createElement("img");
-    img.alt = `Fotka ${index + 1}`;
-    img.src = URL.createObjectURL(file);
-    img.onload = () => URL.revokeObjectURL(img.src);
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "photo-remove-btn";
-    removeBtn.title = "Odebrat fotku";
-    removeBtn.innerHTML = "&times;";
-    removeBtn.addEventListener("click", () => removePhoto(index));
-
-    item.appendChild(img);
-    item.appendChild(removeBtn);
-    photoPreview.appendChild(item);
+  [photoPreview, photoPreviewDetails].forEach((box) => {
+    if (!box) return;
+    box.innerHTML = "";
+    photos.forEach((file, index) => box.appendChild(buildPhotoTile(file, index)));
   });
+
+  if (photoPreviewDetails && photos.length < MAX_PHOTOS) {
+    photoPreviewDetails.appendChild(
+      buildAddPhotoTile("camera", "Vyfotit", () => photoInput.click())
+    );
+    photoPreviewDetails.appendChild(
+      buildAddPhotoTile("images", "Z galerie", () => galleryInput.click())
+    );
+  }
 }
 
 function removePhoto(index) {
   photos.splice(index, 1);
   updatePhotoCountDisplay();
-  updateStatus(`🗑️ Fotka odebrána (zbývá ${photos.length}/${MAX_PHOTOS}).`);
+  const missing = minPhotosRequired() - photos.length;
+  if (missing > 0) {
+    updateStatus(`Fotka odebrána. Do povinného počtu chybí ještě ${missing}.`, "warning");
+  } else {
+    updateStatus(`Fotka odebrána, zbývá ${photos.length}.`);
+  }
 }
 
 // Zpracuje vybrané soubory – z fotoaparátu i z galerie.
@@ -834,79 +847,73 @@ async function handleSelectedPhotos(fileList) {
     const fromFile = fileDateString(files[0]);
     if (fromFile) {
       setRetroDate(fromFile);
-      updateStatus(`🕓 Datum doplněno podle fotky: ${formatDateCz(retroDateStr)}`);
+      updateStatus(`Datum doplněno podle fotky: ${formatDateCz(retroDateStr)}`);
     }
   }
 
+  const before = photos.length;
+  let skipped = false;
   for (let i = 0; i < files.length; i++) {
     if (photos.length >= MAX_PHOTOS) {
-      updateStatus(`ℹ️ Na produkt jdou max. ${MAX_PHOTOS} fotky – zbytek přeskočen.`);
+      skipped = true;
       break;
     }
-    const label = `Foto ${photos.length + 1} / ${MAX_PHOTOS}`;
-    updateStatus(`✂️ Uprav ořez fotky č. ${photos.length + 1}...`);
-    const processedFile = await cropImageInteractive(files[i], label);
-    if (processedFile) {
-      photos.push(processedFile);
-      updateStatus(`📸 Načtena fotka č. ${photos.length}.`);
-    } else {
-      updateStatus("🚫 Fotka byla zrušena. Zkus to znovu.");
-    }
+    updateStatus(`Uprav ořez fotky č. ${photos.length + 1}…`);
+    const processedFile = await cropImageInteractive(files[i], `Fotka ${photos.length + 1}`);
+    if (processedFile) photos.push(processedFile);
     updatePhotoCountDisplay();
   }
 
   updatePhotoCountDisplay();
+  const added = photos.length - before;
 
-  // Jakmile máme všechny fotky, automaticky přejdeme na detaily
-  if (photos.length === MAX_PHOTOS) {
-    updateStatus("✅ Fotky byly úspěšně načteny. Teď detail.");
-    photoSectionSection.classList.add("is-hidden");
-    productDetailsSection.classList.remove("is-hidden");
-    updateLocationHistory();
-    updateStepProgressBar(2);
+  // Z kroku fotek jdeme rovnou na detaily, jakmile jsou povinné fotky hotové
+  // (další jdou přidat tam). Přidávání přímo z detailů krok nemění.
+  const addedInDetails = currentStep === 2;
+  const advance = currentStep === 1 && added > 0 && photos.length >= BASE_PHOTOS;
+  if (advance) showStep(2);
+
+  if (skipped) {
+    updateStatus(`Na produkt jde nejvýš ${MAX_PHOTOS} fotek – zbytek přeskočen.`, "warning");
+  } else if (!added) {
+    updateStatus("Fotka byla zrušena. Zkus to znovu.");
+  } else if (addedInDetails) {
+    updateStatus(`Přidáno. Produkt má teď ${photos.length} fotek.`, "success");
+  } else if (advance) {
+    updateStatus("Fotky jsou připravené. Vyplň detaily – další fotky můžeš přidat i tady.", "success");
   } else if (photos.length >= minPhotosRequired()) {
-    updateStatus(
-      `📸 Máš ${photos.length}/${MAX_PHOTOS} fotek. Můžeš přidat další, nebo jít tlačítkem „Dál“ na detaily.`
-    );
-  } else if (photos.length > 0) {
-    updateStatus(`📸 Načtena fotka ${photos.length}/${MAX_PHOTOS}. Pokračuj další.`);
+    updateStatus(`Máš ${photos.length} fotek. Přidej další, nebo pokračuj tlačítkem „Dál“.`);
+  } else {
+    const missing = minPhotosRequired() - photos.length;
+    updateStatus(`Načtena fotka č. ${photos.length}. Ještě ${missing}.`);
   }
+}
+
+function photoLimitReached() {
+  if (photos.length < MAX_PHOTOS) return false;
+  updateStatus(`Máš už maximum ${MAX_PHOTOS} fotek.`, "warning");
+  return true;
 }
 
 takePhotoBtn.addEventListener("click", () => {
-  if (photos.length < MAX_PHOTOS) {
-    photoInput.click();
-  } else {
-    updateStatus(`✅ Máš už ${MAX_PHOTOS} fotky! Vyplň název a cenu.`);
-  }
+  if (!photoLimitReached()) photoInput.click();
+});
+pickPhotoBtn.addEventListener("click", () => {
+  if (!photoLimitReached()) galleryInput.click();
 });
 
-if (pickPhotoBtn) {
-  pickPhotoBtn.addEventListener("click", () => {
-    if (photos.length < MAX_PHOTOS) {
-      galleryInput.click();
-    } else {
-      updateStatus(`✅ Máš už ${MAX_PHOTOS} fotky! Vyplň název a cenu.`);
-    }
-  });
-}
-
-// Jakmile uživatel vybere soubory (fotoaparát i galerie)
+// Jakmile uživatel vybere soubory. Input hned nulujeme, aby šlo vybrat
+// stejnou fotku znovu.
 photoInput.addEventListener("change", async () => {
-  const files = photoInput.files;
-  // Vynulujeme input, aby šlo vybrat stejnou fotku znovu
-  const picked = Array.from(files || []);
+  const picked = Array.from(photoInput.files || []);
   photoInput.value = "";
   await handleSelectedPhotos(picked);
 });
-
-if (galleryInput) {
-  galleryInput.addEventListener("change", async () => {
-    const picked = Array.from(galleryInput.files || []);
-    galleryInput.value = "";
-    await handleSelectedPhotos(picked);
-  });
-}
+galleryInput.addEventListener("change", async () => {
+  const picked = Array.from(galleryInput.files || []);
+  galleryInput.value = "";
+  await handleSelectedPhotos(picked);
+});
 
 /* ---------------------------------
    Výběr kategorie
@@ -931,15 +938,20 @@ function updateCategoryList(query) {
     if (filtered.length > 0) {
       const groupEl = document.createElement('div');
       groupEl.className = 'category-group';
-      groupEl.textContent = '📂 ' + group.name;
+      groupEl.innerHTML = window.icon('folder');
+      groupEl.appendChild(document.createTextNode(group.name));
       categoryList.appendChild(groupEl);
       filtered.forEach(cat => {
         const btn = document.createElement('button');
-        btn.innerHTML = '📦 ' + cat.name;
+        btn.type = 'button';
+        btn.textContent = cat.name;
         btn.onclick = () => {
           categoryIdInput.value = cat.id;
-          categoryBtnText.innerHTML = '<span class="category-selected">KATEGORIE <i class="fa-solid fa-check"></i></span>';
-          updateStatus('✅ Kategorie vybrána!');
+          clearFieldError('category-id');
+          // Na tlačítku necháme název vybrané kategorie, ať je vidět, co platí.
+          categoryBtnText.innerHTML = '<span class="category-selected">' + window.icon('check') + '<span></span></span>';
+          categoryBtnText.querySelector('span span').textContent = cat.name;
+          updateStatus('Kategorie vybrána.', "success");
           closeModal(categoryModal);
         };
         categoryList.appendChild(btn);
@@ -949,8 +961,8 @@ function updateCategoryList(query) {
   });
   if (!found) {
     const noResult = document.createElement('p');
-    noResult.classList.add('has-text-grey');
-    noResult.innerText = '😕 Žádné kategorie nenalezeny.';
+    noResult.className = 'empty';
+    noResult.textContent = 'Žádné kategorie nenalezeny.';
     categoryList.appendChild(noResult);
   }
 }
@@ -1014,6 +1026,7 @@ async function addProduct() {
   const price = document.getElementById('product-price').value.trim();
   const categoryId = categoryIdInput.value.trim();
   const location = document.getElementById('product-location').value.trim();
+  const note = productNoteInput.value.trim();
   const shippingId = shippingMethodSelect.value;
 
   clearFieldError('product-name');
@@ -1038,31 +1051,34 @@ async function addProduct() {
     valid = false;
   }
   if (!valid) {
-    updateStatus('⚠️ Vyplň všechna povinná pole!');
+    updateStatus('Vyplň všechna povinná pole!', "warning");
     return;
   }
   if (photos.length < minPhotosRequired()) {
     updateStatus(
       isRetroMode()
-        ? '⚠️ Vyber aspoň jednu fotku produktu!'
-        : `⚠️ Nafoť ${MAX_PHOTOS} fotky, než produkt přidáš!`
+        ? 'Vyber aspoň jednu fotku produktu!'
+        : `Nafoť aspoň ${BASE_PHOTOS} fotky, než produkt přidáš!`, "warning"
     );
     return;
   }
 
-  updateStatus("⏳ Zpracovávám a nahrávám fotky...");
+  // Během nahrávání tlačítko zamkneme, ať se produkt nepřidá dvakrát.
+  const addBtn = document.getElementById("add-product-btn");
+  addBtn.classList.add("is-loading");
+  updateStatus("Zpracovávám a nahrávám fotky…", "progress");
   progressBar.classList.remove("is-hidden");
   progressBar.value = 0;
 
   try {
     const photoUrls = [];
     for (let i = 0; i < photos.length; i++) {
-      updateStatus(`🖼️ Nahrávám obrázek ${i + 1}/${photos.length}...`);
+      updateStatus(`Nahrávám obrázek ${i + 1}/${photos.length}...`, "progress");
       const url = await uploadFile(photos[i], i + 1);
       photoUrls.push(url);
       const percent = Math.round(((i + 1) / photos.length) * 100);
       progressBar.value = percent;
-      updateStatus(`📤 Nahrán obrázek ${i + 1}/${photos.length}...`);
+      updateStatus(`Nahrán obrázek ${i + 1}/${photos.length}...`, "progress");
     }
 
     // Uložení umístění do localStorage (kvůli historii)
@@ -1086,7 +1102,8 @@ async function addProduct() {
       return d.toISOString().replace(".000Z", "Z");
     }
 
-    const productDescription = `<div class="aukro-offer-default"><div data-layout="text"><div style="font-family:Helvetica,Arial,sans-serif;color:#111;background:#fff;border:1px solid #111;border-radius:20px;padding:28px;max-width:900px;margin:auto;"><p style="margin:0 0 20px;"><img src="https://cdn-pipeline-output.picsart.com/pipeline-output/31a3a109-ef8f-49d0-b22a-546a6815f9b4.png" alt="RetroAukce" style="display:block;margin:auto;max-width:100%;border-radius:16px;"></p><h3 style="background:#111;color:#fff;border-radius:12px;padding:10px 18px;margin:0 0 10px;font-size:17px;letter-spacing:.5px;"><strong>🛒 NABÍZENÉ ZBOŽÍ</strong></h3><div style="border:1px solid #ddd;border-radius:14px;padding:16px 18px;margin:0 0 12px;"><p style="margin:0 0 8px;">Stav viz. fotografie 📸</p><p style="margin:0;"><strong>Pro dotazy k aukcím preferuji komunikaci e-mailem, z důvodu flexibilnějšího a rychlejšího vyřízení požadavku. Přeji Vám příjemnou dražbu! 💌 Podívejte se i na mé další aukce a objevte skvělé nabídky! 🚀</strong></p></div><h3 style="background:#111;color:#fff;border-radius:12px;padding:10px 18px;margin:22px 0 10px;font-size:17px;letter-spacing:.5px;"><strong>⚠️ INFORMACE O AUKCI</strong></h3><div style="border:1px solid #ddd;border-radius:14px;padding:16px 18px;margin:0 0 12px;"><p style="margin:0 0 8px;">Na platby čekám jeden týden od vydražení aukce, zboží <strong>zasílám 7–10 dní po obdržení platby</strong>. Zboží bude znovu vystaveno, zda-li nebude uhrazeno v této lhůtě.</p><p style="margin:0;">Berte prosím na vědomí, že vydražené zboží <strong>nezasílám na DOBÍRKU</strong>. Zboží mohu zasílat přes <strong>KURÝRNÍ SLUŽBU (DPD) &amp; také ZÁSILKOVNU & BALÍKOVNU</strong>.</p></div><h3 style="background:#111;color:#fff;border-radius:12px;padding:10px 18px;margin:22px 0 10px;font-size:17px;letter-spacing:.5px;"><strong>💳 PLATBA</strong></h3><div style="border:1px solid #ddd;border-radius:14px;padding:16px 18px;margin:0 0 12px;"><p style="margin:0;">Platbu můžete uskutečnit pouze přes <strong>AUKRO</strong>. Děkuji za pochopení. <strong></strong></p></div><p style="margin:28px 0 0;text-align:center;"><a href="https://aukro.cz/uzivatel/RetroAukce/nabidky" style="display:block;width:fit-content;margin:0 auto;background:#111;color:#fff;text-decoration:none;border-radius:999px;padding:14px 32px;font-weight:bold;letter-spacing:.5px;">➜ ZOBRAZIT NABÍDKY</a></p></div></div></div>`;
+    // Šablona popisu je v description.js; poznámka se do ní vloží jako první sekce.
+    const productDescription = window.buildProductDescription(note);
 
     const productId = currentProductId;
     const formattedName = `${name.toUpperCase()} | ${productId}`;
@@ -1128,7 +1145,8 @@ async function addProduct() {
       createdAt: createdAtIso,
       entryMode: entryMode,
       productId: productId,
-      locationName: location
+      locationName: location,
+      note: note
     };
 
     let products = JSON.parse(localStorage.getItem("products")) || [];
@@ -1138,66 +1156,60 @@ async function addProduct() {
     // Posuneme ID produktu na další v pořadí
     advanceProductId();
 
-    // Reset fotek a formuláře
-    photos = [];
-    updatePhotoCountDisplay();
-    document.getElementById("product-name").value = "";
-    document.getElementById("product-price").value = "";
-    document.getElementById("product-location").value = "";
-    categoryIdInput.value = "";
-    categoryBtnText.innerHTML = 'Vybrat kategorii';
-    shippingMethodSelect.value = "2424163";
-    document.getElementById("promo-priority").checked = false;
-    document.getElementById("promo-bold").checked = false;
-    document.getElementById("promo-highlight").checked = false;
-
-    productDetailsSection.classList.add("is-hidden");
-    finishSection.classList.remove("is-hidden");
-    updateStepProgressBar(3);
+    resetProductForm();
+    showStep(3);
 
     updateStatus(
       isRetroMode() && retroDateStr
-        ? `🎉 Produkt přidán k datu ${formatDateCz(addedDateStr)}! Můžeš uložit do DB nebo přidat další.`
-        : "🎉 Produkt přidán! Můžeš dokončit nebo přidat další."
+        ? `Produkt přidán k datu ${formatDateCz(addedDateStr)}! Můžeš uložit do DB nebo přidat další.`
+        : "Produkt přidán! Můžeš dokončit nebo přidat další.", "success"
     );
   } catch (error) {
-    updateStatus(`❌ Chyba při nahrávání fotek: ${error.message}`);
+    updateStatus(`Chyba při nahrávání fotek: ${error.message}`, "error");
+  } finally {
+    addBtn.classList.remove("is-loading");
   }
+}
+
+/* ---------------------------------
+   Vyprázdnění formuláře produktu
+   – jedno místo pro všechny resety, aby se
+     výchozí hodnoty (hlavně doprava) nerozešly.
+-----------------------------------*/
+function resetProductForm() {
+  photos = [];
+  updatePhotoCountDisplay();
+  document.getElementById("product-name").value = "";
+  document.getElementById("product-price").value = "";
+  document.getElementById("product-location").value = "";
+  productNoteInput.value = "";
+  categoryIdInput.value = "";
+  categoryBtnText.textContent = "Vybrat kategorii";
+  shippingMethodSelect.value = DEFAULT_SHIPPING_ID;
+  document.getElementById("promo-priority").checked = false;
+  document.getElementById("promo-bold").checked = false;
+  document.getElementById("promo-highlight").checked = false;
+  progressBar.value = 0;
+  progressBar.classList.add("is-hidden");
+  ["product-name", "product-price", "category-id", "shippingMethod"].forEach(clearFieldError);
 }
 
 /* ---------------------------------
    Přidat další produkt
 -----------------------------------*/
 function addAnotherProduct() {
-  progressBar.value = 0;
-  progressBar.classList.add("is-hidden");
-
-  // Reset formuláře pro nový produkt
-  photos = [];
-  updatePhotoCountDisplay();
-  document.getElementById("product-name").value = "";
-  document.getElementById("product-price").value = "";
-  document.getElementById("product-location").value = "";
-  categoryIdInput.value = "";
-  categoryBtnText.innerHTML = 'Vybrat kategorii';
-  shippingMethodSelect.value = "2424163";
-  document.getElementById("promo-priority").checked = false;
-  document.getElementById("promo-bold").checked = false;
-  document.getElementById("promo-highlight").checked = false;
+  resetProductForm();
 
   // Reset historie pro nový produkt
   ['product-name', 'product-price', 'product-location'].forEach(id => {
     renderInputHistory(id);
   });
 
-  finishSection.classList.add("is-hidden");
-  productDetailsSection.classList.add("is-hidden");
-  photoSectionSection.classList.remove("is-hidden");
-  updateStepProgressBar(1);
+  showStep(1);
   updateStatus(
     isRetroMode()
-      ? "👉 Vyber fotky dalšího produktu z galerie."
-      : "👉 Nafoť fotky pro další produkt."
+      ? "Vyber fotky dalšího produktu z galerie."
+      : "Nafoť fotky pro další produkt."
   );
 }
 
@@ -1213,8 +1225,8 @@ async function finish() {
   savedProductsDiv.innerHTML = "";
 
   if (products.length === 0) {
-    savedProductsDiv.innerHTML = "<p>Žádné produkty nebyly přidány. 😕</p>";
-    updateStatus("⚠️ Přidej aspoň jeden produkt před dokončením.");
+    savedProductsDiv.innerHTML = "<p>Zatím nebyl přidán žádný produkt.</p>";
+    updateStatus("Přidej aspoň jeden produkt před dokončením.", "warning");
     return;
   }
 
@@ -1310,10 +1322,10 @@ async function finish() {
     // Zkopírování odkazu do schránky
     navigator.clipboard.writeText(excelUrl).then(
       () => {
-        updateStatus("✅ Odkaz zkopírován do schránky!");
+        updateStatus("Odkaz zkopírován do schránky!", "success");
       },
       (err) => {
-        updateStatus("❌ Chyba při kopírování odkazu: " + err);
+        updateStatus("Chyba při kopírování odkazu: " + err, "error");
       }
     );
 
@@ -1324,7 +1336,7 @@ async function finish() {
     savedProductsDiv.innerHTML =
       "<p>Soubor byl nahrán a odkaz zkopírován. Otevři WhatsApp a odešli zprávu.</p>";
   } catch (error) {
-    updateStatus(`❌ Chyba při nahrávání Excelu: ${error.message}`);
+    updateStatus(`Chyba při nahrávání Excelu: ${error.message}`, "error");
   }
 }
 
@@ -1369,7 +1381,7 @@ async function uploadFileForExcel(file, randomSuffix) {
 -----------------------------------*/
 async function syncProductsToFirestore(products, excelUrl) {
   if (!window.db) {
-    updateStatus("ℹ️ Firebase není nastaven – import do dashboardu přeskočen.");
+    updateStatus("Firebase není nastaven – import do dashboardu přeskočen.");
     return;
   }
 
@@ -1380,7 +1392,7 @@ async function syncProductsToFirestore(products, excelUrl) {
   if (!pending.length) return;
 
   try {
-    updateStatus("🗄️ Importuji produkty do dashboardu...");
+    updateStatus("Importuji produkty do dashboardu...", "progress");
     const col = window.db.collection("products");
 
     // Zjistíme, která product_id už v databázi jsou – ta nikdy nepřepíšeme.
@@ -1412,6 +1424,7 @@ async function syncProductsToFirestore(products, excelUrl) {
           highlight: !!p.highlight,
           description: p.description,
           excel_url: excelUrl || null,
+          note: p.note || null,
           sold: false,
           sold_at: null,
           raw: p, // celý produkt pro pozdější re-export ve formátu pro Aukro
@@ -1435,13 +1448,13 @@ async function syncProductsToFirestore(products, excelUrl) {
     localStorage.setItem("products", JSON.stringify(all));
 
     if (existing.size) {
-      updateStatus(`✅ Naimportováno ${toWrite.length}. ⛔ ${existing.size} ID už existovalo – přeskočeno.`);
+      updateStatus(`Naimportováno ${toWrite.length}. ${existing.size} ID už existovalo – přeskočeno.`, "success");
     } else {
-      updateStatus("✅ Produkty naimportovány do dashboardu.");
+      updateStatus("Produkty naimportovány do dashboardu.", "success");
     }
   } catch (e) {
     const msg = (e && e.message) || e;
-    updateStatus("⚠️ Import do dashboardu selhal: " + msg);
+    updateStatus("Import do dashboardu selhal: " + msg, "warning");
   }
 }
 
@@ -1457,13 +1470,13 @@ async function saveToDatabase() {
   const savedProductsDiv = document.getElementById("saved-products");
 
   if (!products.length) {
-    updateStatus("⚠️ Nejdřív přidej aspoň jeden produkt.");
+    updateStatus("Nejdřív přidej aspoň jeden produkt.", "warning");
     return;
   }
 
   const pending = products.filter((p) => !p.syncedToDb);
   if (!pending.length) {
-    updateStatus("ℹ️ Všechny přidané produkty už v databázi jsou.");
+    updateStatus("Všechny přidané produkty už v databázi jsou.");
     return;
   }
 
@@ -1498,28 +1511,13 @@ async function resetStorage() {
   productIdNum = 0;
   productIdWidth = 2;
   if (startProductIdInput) startProductIdInput.value = "";
-  updatePhotoCountDisplay();
-  document.getElementById("product-name").value = "";
-  document.getElementById("product-price").value = "";
-  document.getElementById("product-location").value = "";
-  categoryIdInput.value = "";
-  categoryBtnText.innerHTML = 'Vybrat kategorii';
-  shippingMethodSelect.value = "2424163";
-  document.getElementById("promo-priority").checked = false;
-  document.getElementById("promo-bold").checked = false;
-  document.getElementById("promo-highlight").checked = false;
-  progressBar.value = 0;
-  progressBar.classList.add("is-hidden");
+  resetProductForm();
 
-  productDetailsSection.classList.add("is-hidden");
-  photoSectionSection.classList.add("is-hidden");
-  finishSection.classList.add("is-hidden");
-  shopSelectionSection.classList.remove("is-hidden");
   document.getElementById("saved-products").innerHTML = "";
-  updateStepProgressBar(0);
+  showStep(0);
   applyEntryModeUI();
 
-  updateStatus("🧹 Data byla vymazána! Začni znovu.");
+  updateStatus("Data byla vymazána! Začni znovu.");
   loadLastProductId();
 }
 
@@ -1533,25 +1531,42 @@ const steps = [
   finishSection
 ];
 
+// Nápověda ve stavovém řádku po přechodu na krok.
+const STEP_HINTS = [
+  "Začni zadáním ID produktu",
+  "Přidej fotky produktu",
+  "Vyplň detaily produktu",
+  "Produkty můžeš uložit, odeslat, nebo přidat další"
+];
+
+// Přepne na daný krok (0–3). Panel se při zobrazení animuje sám přes CSS.
+function showStep(step) {
+  steps.forEach((el, idx) => el.classList.toggle("is-hidden", idx !== step));
+  currentStep = step;
+  updateStepProgressBar(step);
+  if (step === 2) updateLocationHistory();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
-    const currentStep = parseInt(btn.dataset.step, 10);
+    const fromStep = parseInt(btn.dataset.step, 10);
     const isNext = btn.classList.contains("next-btn");
-    const newStep = isNext ? currentStep + 1 : currentStep - 1;
+    const newStep = isNext ? fromStep + 1 : fromStep - 1;
 
     if (newStep >= 0 && newStep < steps.length) {
       // Krok 0 -> nastavení ID produktu (+ kontrola unikátnosti)
-      if (currentStep === 0 && isNext) {
+      if (fromStep === 0 && isNext) {
         const parsed = parseProductId(startProductIdInput.value);
         if (!parsed) {
-          updateStatus("⚠️ Zadej platné ID produktu, např. RA01");
+          updateStatus("Zadej platné ID produktu, např. RA01", "warning");
           return;
         }
         const check = await checkStartIdFree(parsed);
         if (!check.ok) {
           startProductIdInput.value = check.suggest;
           updateStatus(
-            `⛔ ID ${formatProductId(parsed.prefix, parsed.num, parsed.width)} už bylo použité. Zkus ${check.suggest}.`
+            `ID ${formatProductId(parsed.prefix, parsed.num, parsed.width)} už bylo použité. Zkus ${check.suggest}.`, "warning"
           );
           return;
         }
@@ -1559,34 +1574,21 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
       }
       // Kontrola fotek při přechodu z kroku 1
       // (zpětné zadání: stačí aspoň jedna, jinak chceme všechny 3)
-      if (currentStep === 1 && isNext && photos.length < minPhotosRequired()) {
+      if (fromStep === 1 && isNext && photos.length < minPhotosRequired()) {
         updateStatus(
           isRetroMode()
-            ? "⚠️ Vyber aspoň jednu fotku, než přejdeš dál!"
-            : `⚠️ Musíš nafotit ${MAX_PHOTOS} fotky, než přejdeš dál!`
+            ? "Vyber aspoň jednu fotku, než přejdeš dál!"
+            : `Musíš nafotit aspoň ${BASE_PHOTOS} fotky, než přejdeš dál!`, "warning"
         );
         return;
       }
       // Při přechodu na fotky ještě zaktualizujeme popisky podle režimu
-      if (currentStep === 0 && isNext) {
+      if (fromStep === 0 && isNext) {
         applyEntryModeUI();
       }
-      // Kontrola vyplnění při přechodu z kroku 2
-      if (currentStep === 2 && isNext) {
-        const name = document.getElementById("product-name").value.trim();
-        const price = document.getElementById("product-price").value.trim();
-        const categoryId = categoryIdInput.value.trim();
-        const shippingId = shippingMethodSelect.value;
-        if (!name || !price || !categoryId || !shippingId) {
-          updateStatus("⚠️ Vyplň název, cenu, kategorii a dopravu, než přejdeš dál!");
-          return;
-        }
-      }
 
-      steps[currentStep].classList.add("is-hidden");
-      steps[newStep].classList.remove("is-hidden");
-      updateStatus(`👉 Přepnuto na krok č. ${newStep + 1}`);
-      updateStepProgressBar(newStep);
+      showStep(newStep);
+      updateStatus(STEP_HINTS[newStep]);
     }
   });
 });
@@ -1620,7 +1622,7 @@ window.addEventListener("beforeunload", (e) => {
 deleteDataBtn.addEventListener("click", () => {
   resetStorage();
   closeModal(exitModal);
-  updateStatus("🧹 Data vymazána při odchodu!");
+  updateStatus("Data vymazána při odchodu!");
   setTimeout(() => window.location.reload(), 1000);
 });
 
@@ -1631,18 +1633,22 @@ closeModalBtn.addEventListener("click", () => {
 /* ---------------------------------
    Propojení tlačítek
 -----------------------------------*/
+// addProduct se níže obaluje (ukládání historie), proto ho voláme až při kliku.
+document.getElementById("add-product-btn").addEventListener("click", () => addProduct());
+document.getElementById("add-another-btn").addEventListener("click", addAnotherProduct);
+document.getElementById("save-db-btn").addEventListener("click", saveToDatabase);
 finishBtn.addEventListener("click", finish);
 resetBtn.addEventListener("click", resetStorage);
 
 // --- Progress bar kroků ---
 function updateStepProgressBar(step) {
   const bar = document.getElementById('step-progress-bar');
-  const steps = document.querySelectorAll('.step-label');
-  const percent = [0, 33, 66, 100][step] || 0;
-  bar.style.width = percent + '%';
-  steps.forEach((el, idx) => {
-    if (idx === step) el.classList.add('active');
-    else el.classList.remove('active');
+  const labels = document.querySelectorAll('.step-label');
+  // Čára končí pod popiskem aktuálního kroku (4 sloupce po 25 %).
+  bar.style.width = ((step + 1) * 25) + '%';
+  labels.forEach((el, idx) => {
+    el.classList.toggle('active', idx === step);
+    el.classList.toggle('done', idx < step);
   });
 }
 
@@ -1675,12 +1681,16 @@ const inputHistoryKeys = {
 function getInputHistory(inputId) {
   const key = inputHistoryKeys[inputId];
   if (!key) return [];
-  return JSON.parse(localStorage.getItem(key) || '[]');
+  const recent = JSON.parse(localStorage.getItem(key) || '[]');
+  if (inputId !== 'product-location') return recent;
+  // U umístění nabízíme i všechna dříve použitá, nejen poslední dvě.
+  const all = JSON.parse(localStorage.getItem('locationHistory') || '[]');
+  return recent.concat(all.filter(v => !recent.includes(v)));
 }
 function setInputHistory(inputId, value) {
   const key = inputHistoryKeys[inputId];
   if (!key) return;
-  let arr = getInputHistory(inputId);
+  let arr = JSON.parse(localStorage.getItem(key) || '[]');
   arr = arr.filter(v => v !== value && v !== '');
   arr.unshift(value);
   if (arr.length > 2) arr = arr.slice(0, 2);

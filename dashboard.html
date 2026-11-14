@@ -3,22 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📊 iAUKRO – Dashboard</title>
+  <title>iAUKRO – Dashboard</title>
 
-  <!-- Bulma CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" />
-  <!-- Google Fonts -->
+  <!-- Písmo -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Vlastní styly -->
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="dashboard.css" />
 
-  <!-- Přepínač světlý/tmavý režim (nastaví motiv co nejdřív) -->
+  <!-- Ikony + přepínač světlý/tmavý režim (nastaví motiv co nejdřív) -->
+  <script src="icons.js"></script>
   <script src="theme.js"></script>
 
   <!-- Knihovna XLSX (export Excelu) -->
@@ -32,156 +29,170 @@
   <script src="auth-gate.js"></script>
 </head>
 <body>
-  <section class="section">
-    <div class="container">
+  <main class="shell">
 
-      <!-- Hlavička -->
-      <header class="dash-header mb-5">
-        <h1 class="title is-3">
-          <i class="fa-solid fa-database"></i> iAUKRO Dashboard
-        </h1>
-        <div class="dash-actions">
-          <a href="index.html" class="button is-primary is-rounded">
-            <i class="fa-solid fa-camera-retro"></i>&nbsp; Přidat produkty
-          </a>
-          <a href="index.html?rezim=zpetne" class="button is-info is-rounded">
-            <i class="fa-solid fa-clock-rotate-left"></i>&nbsp; Přidat zpětně
-          </a>
-          <button id="export-btn" class="button is-success is-rounded">
-            <i class="fa-solid fa-file-excel"></i>&nbsp; Export Excel (bez prodaných)
-          </button>
-          <button id="refresh-btn" class="button is-light is-rounded">
-            <i class="fa-solid fa-rotate"></i>&nbsp; Obnovit
-          </button>
-        </div>
-      </header>
+    <!-- Hlavička -->
+    <header class="topbar">
+      <a class="brand" href="dashboard.html">
+        <i data-icon="grid"></i> iAUKRO <span class="brand-sub">Dashboard</span>
+      </a>
+    </header>
 
-      <!-- Statistiky -->
-      <div class="dash-stats mb-5">
-        <div class="stat-card">
-          <span class="stat-num" id="stat-total">–</span>
-          <span class="stat-label">📦 Produktů celkem</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num" id="stat-today">–</span>
-          <span class="stat-label">🆕 Přidáno dnes</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num" id="stat-sold">–</span>
-          <span class="stat-label">✅ Prodáno</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num" id="stat-last">–</span>
-          <span class="stat-label">🔖 Poslední ID</span>
-        </div>
-      </div>
-
-      <!-- Hledání + filtr -->
-      <div class="dash-toolbar mb-4">
-        <div class="control has-icons-left is-flex-grow-1">
-          <input id="search" class="input is-rounded" type="text" placeholder="Hledej podle ID nebo názvu…" />
-          <span class="icon is-left"><i class="fa-solid fa-magnifying-glass"></i></span>
-        </div>
-        <label class="checkbox dash-hide-sold">
-          <input type="checkbox" id="hide-sold" /> Skrýt prodané
-        </label>
-      </div>
-
-      <!-- Stavová hláška -->
-      <div id="status-msg" class="notification is-light is-rounded is-hidden"></div>
-
-      <!-- Seznam produktů -->
-      <div id="products-container" class="dash-grid"></div>
-
+    <div class="dash-actions">
+      <a href="index.html" class="btn">
+        <i data-icon="camera"></i> Přidat produkty
+      </a>
+      <a href="index.html?rezim=zpetne" class="btn btn--ghost">
+        <i data-icon="history"></i> Přidat zpětně
+      </a>
+      <span class="dash-actions-gap"></span>
+      <button id="export-btn" class="btn btn--ghost" title="Vyexportuje všechny neprodané produkty">
+        <i data-icon="download"></i> Export všech neprodaných
+      </button>
+      <button id="refresh-btn" class="btn btn--ghost btn--icon" title="Obnovit" aria-label="Obnovit">
+        <i data-icon="refresh"></i>
+      </button>
     </div>
-  </section>
+
+    <!-- Statistiky -->
+    <section class="dash-stats" aria-label="Statistiky">
+      <div class="stat-card">
+        <span class="stat-label">Produktů celkem</span>
+        <span class="stat-num" id="stat-total">–</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Přidáno dnes</span>
+        <span class="stat-num" id="stat-today">–</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Prodáno</span>
+        <span class="stat-num" id="stat-sold">–</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Poslední ID</span>
+        <span class="stat-num" id="stat-last">–</span>
+      </div>
+    </section>
+
+    <!-- Hledání + filtr + výběr -->
+    <div class="dash-toolbar">
+      <div class="search">
+        <i data-icon="search"></i>
+        <input id="search" class="input" type="search" placeholder="Hledej podle ID nebo názvu" />
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="hide-sold" />
+        <span class="switch-track"></span>
+        Skrýt prodané
+      </label>
+      <button id="select-all-btn" class="btn btn--ghost btn--sm">
+        <i data-icon="check-square"></i> <span id="select-all-text">Vybrat vše</span>
+      </button>
+    </div>
+
+    <!-- Stavová hláška -->
+    <div id="status-msg" class="status is-hidden" role="status" aria-live="polite"></div>
+
+    <!-- Seznam produktů -->
+    <div id="products-container" class="dash-grid"></div>
+
+  </main>
+
+  <!-- Lišta výběru: objeví se, jakmile je označený aspoň jeden produkt -->
+  <div id="selection-bar" class="selection-bar" aria-hidden="true">
+    <span class="selection-count"><strong id="selection-count">0</strong> vybráno</span>
+    <button id="selection-clear-btn" class="btn btn--sm selection-clear">Zrušit výběr</button>
+    <button id="export-selected-btn" class="btn btn--sm selection-export">
+      <i data-icon="download"></i> Exportovat<span class="selection-export-more">&nbsp;vybrané</span>
+    </button>
+  </div>
 
   <!-- Modál náhledu fotek -->
   <div id="photo-modal" class="modal">
     <div class="modal-background"></div>
-    <div class="modal-content">
+    <div class="modal-content photo-modal-content">
       <div id="photo-modal-body" class="dash-photo-modal"></div>
     </div>
-    <button class="modal-close is-large" aria-label="close"></button>
+    <button class="modal-close btn btn--icon" aria-label="Zavřít"><i data-icon="x"></i></button>
   </div>
 
   <!-- Modál úpravy produktu -->
   <div id="edit-modal" class="modal">
     <div class="modal-background"></div>
     <div class="modal-content edit-modal-content">
-      <div class="box is-rounded edit-modal-box">
-        <p class="is-size-5 has-text-weight-semibold mb-1">✏️ Upravit produkt</p>
-        <p class="edit-modal-id mb-4">
-          ID <strong id="edit-product-id">—</strong>
-          <span class="edit-hint">(ID se měnit nedá – je to klíč v databázi)</span>
+      <div class="box">
+        <p class="modal-title">Upravit produkt</p>
+        <p class="modal-text">
+          ID <strong id="edit-product-id">—</strong> · nedá se měnit, je to klíč v databázi
         </p>
 
         <!-- Název -->
-        <div class="field mb-4">
+        <div class="field">
           <label for="edit-name" class="label">Název</label>
-          <input id="edit-name" type="text" class="input is-rounded" autocomplete="off" />
+          <input id="edit-name" type="text" class="input" autocomplete="off" />
           <p class="help">Formát pro Aukro: <code>NÁZEV | ID</code></p>
         </div>
 
-        <!-- Cena -->
-        <div class="field mb-4">
-          <label for="edit-price" class="label">Cena (Kč)</label>
-          <input id="edit-price" type="number" class="input is-rounded" autocomplete="off" />
+        <div class="field-row">
+          <!-- Cena -->
+          <div class="field">
+            <label for="edit-price" class="label">Cena (Kč)</label>
+            <input id="edit-price" type="number" inputmode="numeric" class="input" autocomplete="off" />
+          </div>
+          <!-- Datum přidání -->
+          <div class="field">
+            <label for="edit-date" class="label">Datum přidání</label>
+            <input id="edit-date" type="date" class="input" />
+          </div>
         </div>
 
         <!-- Umístění -->
-        <div class="field mb-4">
+        <div class="field">
           <label for="edit-location" class="label">Umístění</label>
-          <input id="edit-location" type="text" class="input is-rounded" autocomplete="off" />
+          <input id="edit-location" type="text" class="input" autocomplete="off" />
           <p class="help">Přepíše se i <code>extId</code> pro export (umístění | ID).</p>
         </div>
 
-        <!-- Datum přidání -->
-        <div class="field mb-4">
-          <label for="edit-date" class="label">Datum přidání</label>
-          <input id="edit-date" type="date" class="input is-rounded" />
+        <!-- Poznámka -->
+        <div class="field">
+          <label for="edit-note" class="label">Poznámka k předmětu <small>volitelné</small></label>
+          <textarea id="edit-note" class="textarea" rows="3"></textarea>
+          <p class="help">Při změně se popis nabídky vygeneruje znovu z aktuální šablony.</p>
         </div>
 
         <!-- Kategorie -->
-        <div class="field mb-4">
-          <label class="label">Kategorie</label>
-          <button type="button" id="edit-category-btn" class="button is-fullwidth is-rounded">
+        <div class="field">
+          <span class="label">Kategorie</span>
+          <button type="button" id="edit-category-btn" class="btn btn--ghost btn--block">
             <span id="edit-category-text">Vybrat kategorii</span>
           </button>
           <input type="hidden" id="edit-category-id" />
-          <div id="edit-category-panel" class="is-hidden mt-2">
-            <input id="edit-category-search" class="input is-rounded mb-2" type="text"
-                   placeholder="🔍 Hledej kategorii" />
-            <div id="category-list" class="list" style="max-height: 200px; overflow-y: auto;"></div>
+          <div id="edit-category-panel" class="is-hidden" style="margin-top:10px">
+            <input id="edit-category-search" class="input" type="text" placeholder="Hledej kategorii" />
+            <div id="category-list" class="category-list"></div>
           </div>
         </div>
 
         <!-- Doprava -->
-        <div class="field mb-4">
+        <div class="field">
           <label class="label" for="edit-shipping">Doprava</label>
-          <div class="control">
-            <div class="select is-rounded is-fullwidth">
-              <select id="edit-shipping">
-                <option value="2438895">ZS or BA (ID 2438895)</option>
-                <option value="2438897">PPL (ID 2438897)</option>
-                <option value="2438896">TOPTRANS (ID 2438896)</option>
-                <option value="2438898">OSOBNĚ (ID 2438898)</option>
-              </select>
-            </div>
-          </div>
+          <select id="edit-shipping" class="select">
+            <option value="2438895">ZS or BA (ID 2438895)</option>
+            <option value="2438897">PPL (ID 2438897)</option>
+            <option value="2438896">TOPTRANS (ID 2438896)</option>
+            <option value="2438898">OSOBNĚ (ID 2438898)</option>
+          </select>
         </div>
 
         <!-- Propagace -->
-        <div class="field mb-4">
-          <label class="label">Propagace</label>
+        <div class="field">
+          <span class="label">Propagace</span>
           <div class="promo-container">
             <label class="promo-card" for="edit-promo-priority">
               <input type="checkbox" id="edit-promo-priority" />
               <span class="promo-card-custom-box"></span>
               <div class="promo-card-content">
-                <div class="promo-title">
-                  <i class="fa-solid fa-star"></i><span>Přednostní výpis</span>
-                </div>
+                <div class="promo-title"><i data-icon="star"></i> Přednostní výpis</div>
                 <div class="promo-desc">priorityListing</div>
               </div>
             </label>
@@ -189,9 +200,7 @@
               <input type="checkbox" id="edit-promo-bold" />
               <span class="promo-card-custom-box"></span>
               <div class="promo-card-content">
-                <div class="promo-title">
-                  <i class="fa-solid fa-bold"></i><span>Tučný titulek</span>
-                </div>
+                <div class="promo-title"><i data-icon="bold"></i> Tučný titulek</div>
                 <div class="promo-desc">boldTitle</div>
               </div>
             </label>
@@ -199,9 +208,7 @@
               <input type="checkbox" id="edit-promo-highlight" />
               <span class="promo-card-custom-box"></span>
               <div class="promo-card-content">
-                <div class="promo-title">
-                  <i class="fa-solid fa-highlighter"></i><span>Zvýraznění</span>
-                </div>
+                <div class="promo-title"><i data-icon="highlighter"></i> Zvýraznění</div>
                 <div class="promo-desc">highlight</div>
               </div>
             </label>
@@ -209,53 +216,42 @@
         </div>
 
         <!-- Fotky -->
-        <div class="field mb-4">
-          <label class="label">Fotky</label>
+        <div class="field">
+          <span class="label">Fotky</span>
           <div id="edit-photos" class="edit-photos"></div>
-          <div class="field has-addons mt-2">
-            <div class="control is-expanded">
-              <input id="edit-photo-url" type="url" class="input is-rounded is-small"
-                     placeholder="https://… odkaz na fotku" />
-            </div>
-            <div class="control">
-              <button type="button" id="edit-photo-add" class="button is-small is-rounded">
-                Přidat
-              </button>
-            </div>
+          <div class="add-url">
+            <input id="edit-photo-url" type="url" class="input" placeholder="https://… odkaz na fotku" />
+            <button type="button" id="edit-photo-add" class="btn btn--ghost">Přidat</button>
           </div>
           <p class="help">První fotka je náhled i hlavní obrázek v Aukru.</p>
         </div>
 
         <!-- Chybová hláška -->
-        <p id="edit-error" class="edit-error mb-3"></p>
+        <p id="edit-error" class="edit-error"></p>
 
         <!-- Potvrzení smazání -->
-        <div id="edit-delete-confirm" class="edit-delete-confirm is-hidden mb-4">
-          <p class="mb-1">
-            🗑️ Opravdu smazat <strong id="edit-delete-id">—</strong> z databáze?
+        <div id="edit-delete-confirm" class="edit-delete-confirm is-hidden">
+          <p>
+            <strong>Opravdu smazat <span id="edit-delete-id">—</span> z databáze?</strong>
           </p>
-          <p class="edit-hint mb-3">
+          <p class="edit-hint">
             Nejde to vrátit. Fotky zůstanou na Cloudinary a ID se uvolní –
             appka ho pak může přidělit dalšímu produktu.
           </p>
-          <div class="buttons is-right">
-            <button type="button" id="edit-delete-no" class="button is-small is-rounded">
-              Ne, nechat
-            </button>
-            <button type="button" id="edit-delete-yes" class="button is-small is-danger is-rounded">
-              Ano, smazat
-            </button>
+          <div class="modal-actions">
+            <button type="button" id="edit-delete-no" class="btn btn--ghost btn--sm">Ne, nechat</button>
+            <button type="button" id="edit-delete-yes" class="btn btn--sm">Ano, smazat</button>
           </div>
         </div>
 
         <div class="edit-modal-buttons">
-          <button type="button" id="edit-delete-btn" class="button is-danger is-light is-rounded">
-            <i class="fa-solid fa-trash-can"></i>&nbsp; Smazat
+          <button type="button" id="edit-delete-btn" class="btn btn--danger">
+            <i data-icon="trash"></i> Smazat
           </button>
           <span class="edit-modal-buttons-right">
-            <button type="button" id="edit-cancel-btn" class="button is-rounded">Zrušit</button>
-            <button type="button" id="edit-save-btn" class="button is-success is-rounded">
-              <i class="fa-solid fa-floppy-disk"></i>&nbsp; Uložit změny
+            <button type="button" id="edit-cancel-btn" class="btn btn--ghost">Zrušit</button>
+            <button type="button" id="edit-save-btn" class="btn">
+              <i data-icon="save"></i> Uložit
             </button>
           </span>
         </div>
@@ -264,6 +260,7 @@
   </div>
 
   <script src="categories.js"></script>
+  <script src="description.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

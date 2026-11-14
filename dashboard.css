@@ -1,212 +1,453 @@
 /* ---------------------------------
    iAUKRO Dashboard – styly
-   Barvy jedou přes proměnné ze styles.css,
-   takže se automaticky mění se světlým/tmavým režimem.
+   Staví na proměnných a komponentách ze styles.css
+   (tlačítka, pole, modály); tady je jen to, co je
+   pro dashboard navíc.
 -----------------------------------*/
 
-.dash-header {
+.shell {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 20px 24px 120px;
+}
+
+.brand-sub {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+/* Akce pod hlavičkou */
+.dash-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.dash-header .title {
-  margin-bottom: 0;
-}
-.dash-actions {
-  display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.dash-actions-gap {
+  flex: 1;
 }
 
 /* Statistiky */
 .dash-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 22px;
+  overflow: hidden;
 }
 .stat-card {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--border-radius-lg);
-  padding: 18px 16px;
-  text-align: center;
-  box-shadow: var(--panel-shadow);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  padding: 18px 20px;
+  animation: rise 0.5s var(--ease) backwards;
+}
+.stat-card + .stat-card {
+  border-left: 1px solid var(--line);
+}
+.stat-card:nth-child(2) { animation-delay: 0.05s; }
+.stat-card:nth-child(3) { animation-delay: 0.1s; }
+.stat-card:nth-child(4) { animation-delay: 0.15s; }
+.stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .stat-num {
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: var(--accent-color);
-  line-height: 1.1;
-}
-.stat-label {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  font-weight: 600;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Toolbar (hledání + filtr) */
+/* Toolbar (hledání + filtr + výběr) */
 .dash-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  flex-wrap: wrap;
+  margin-bottom: 18px;
 }
-.dash-hide-sold {
-  color: var(--text-secondary);
-  font-weight: 600;
+.search {
+  position: relative;
+  flex: 1 1 240px;
+}
+.search .icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--faint);
+  pointer-events: none;
+}
+.search .input {
+  padding-left: 40px;
+}
+
+/* Posuvný vypínač s popiskem */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
   white-space: nowrap;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.switch-track {
+  position: relative;
+  width: 36px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  transition: background-color 0.25s var(--ease);
+}
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg);
+  transition: transform 0.25s var(--ease);
+}
+.switch:has(input:checked) {
+  color: var(--fg);
+}
+.switch:has(input:checked) .switch-track {
+  background: var(--fg);
+}
+.switch:has(input:checked) .switch-track::after {
+  transform: translateX(14px);
+}
+.switch:has(input:focus-visible) .switch-track {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
 }
 
 /* Mřížka produktů */
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
+}
+.dash-empty {
+  grid-column: 1 / -1;
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
 }
 
 .prod-card {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--border-radius-lg);
-  overflow: hidden;
-  box-shadow: var(--panel-shadow);
-  transition: var(--transition-smooth);
+  position: relative;
   display: flex;
   flex-direction: column;
-  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+  transition: transform 0.3s var(--ease), border-color var(--fast) var(--ease),
+    box-shadow 0.3s var(--ease);
+  animation: rise 0.45s var(--ease) backwards;
 }
 .prod-card:hover {
   transform: translateY(-3px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
 }
-.prod-card.is-sold {
-  opacity: 0.72;
-}
-.prod-card.is-sold .prod-thumb::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+.prod-card.is-selected {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 1px var(--fg);
 }
 
 .prod-thumb {
   position: relative;
   aspect-ratio: 1 / 1;
-  background: var(--input-bg) center / cover no-repeat;
+  background: var(--surface-2) center / cover no-repeat;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
-  font-size: 2rem;
+  color: var(--faint);
+}
+.prod-thumb > .icon {
+  width: 32px;
+  height: 32px;
 }
 .prod-thumb.is-clickable {
   cursor: zoom-in;
 }
+/* Prodané: fotka černobíle a ztlumená */
+.prod-card.is-sold .prod-thumb {
+  filter: grayscale(1);
+}
+.prod-card.is-sold .prod-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.55;
+}
+
 .prod-thumb-count {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  background: rgba(0, 0, 0, 0.65);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.7);
   color: #fff;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 999px;
-  z-index: 1;
+}
+.prod-thumb-count .icon {
+  width: 12px;
+  height: 12px;
 }
 
-/* Odznak PRODÁNO */
 .sold-badge {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  background: var(--danger-color);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  bottom: 8px;
+  left: 8px;
   z-index: 2;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Zaškrtávátko výběru k exportu */
+.prod-select {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  cursor: pointer;
+}
+.prod-select input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.prod-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid #fff;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: transparent;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: all var(--fast) var(--ease);
+}
+.prod-check .icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 3;
+}
+.prod-select:hover .prod-check {
+  background: rgba(0, 0, 0, 0.6);
+}
+.prod-select input:checked + .prod-check {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+  animation: pop 0.25s var(--ease);
+}
+.prod-select input:focus-visible + .prod-check {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .prod-body {
-  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
+  padding: 13px 14px 14px;
+  flex: 1;
+}
+.prod-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .prod-id {
-  display: inline-block;
-  align-self: flex-start;
-  background: var(--accent-color);
-  color: #0b0f17;
-  font-weight: 800;
-  font-size: 0.75rem;
-  letter-spacing: 0.5px;
-  padding: 3px 10px;
-  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.prod-price {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .prod-name {
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  line-height: 1.25;
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 .prod-meta {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
-.prod-date {
-  font-size: 0.74rem;
-  color: var(--text-secondary);
-  opacity: 0.85;
+.prod-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-.sold-toggle {
-  width: 100%;
-  border-radius: var(--border-radius-md) !important;
-  font-weight: 700 !important;
+.prod-meta .icon,
+.prod-note .icon {
+  width: 13px;
+  height: 13px;
+}
+.prod-note {
+  display: flex;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.prod-note .icon {
+  margin-top: 0.2em;
+}
+.prod-note span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .prod-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: auto;
+  padding-top: 6px;
 }
-.prod-actions .button {
-  flex: 1 1 110px;
-  border-radius: var(--border-radius-md) !important;
-  font-weight: 700 !important;
+/* Na úzké kartě (mobil, dva sloupce) se tlačítka zalomí pod sebe. */
+.prod-actions .btn {
+  flex: 1 1 96px;
+  min-width: 0;
+  padding: 0 8px;
 }
+
+/* Lišta výběru (plovoucí dole) */
+.selection-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  box-shadow: var(--shadow);
+  transform: translate(-50%, 150%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.45s var(--ease), opacity 0.3s var(--ease);
+}
+.selection-bar.is-visible {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.selection-count {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.selection-bar .btn {
+  border-radius: var(--radius-pill);
+}
+/* Lišta je inverzní, takže tlačítka v ní mají barvy obráceně. */
+.selection-clear {
+  background: transparent;
+  color: var(--inverse-fg);
+  border-color: transparent;
+  opacity: 0.7;
+}
+.selection-clear:hover {
+  opacity: 1;
+}
+.selection-export {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--bg);
+}
+
+/* Modál fotek */
+.photo-modal-content {
+  max-width: 900px;
+}
+.dash-photo-modal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.dash-photo-modal img {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  display: block;
+  animation: pop 0.35s var(--ease) backwards;
+}
+.dash-photo-modal img:nth-child(2) { animation-delay: 0.05s; }
+.dash-photo-modal img:nth-child(3) { animation-delay: 0.1s; }
+.dash-photo-modal img:nth-child(n + 4) { animation-delay: 0.15s; }
 
 /* Modál úpravy produktu */
 .edit-modal-content {
-  max-width: 560px !important;
+  max-width: 560px;
 }
-.edit-modal-box {
-  max-height: 86vh;
-  overflow-y: auto;
-  text-align: left;
-}
-.edit-modal-id {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-.edit-hint {
-  opacity: 0.75;
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 .edit-error {
-  color: var(--danger-color);
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   font-weight: 600;
-  min-height: 1em;
+  margin-bottom: 14px;
+}
+.edit-error:empty {
+  display: none;
 }
 .edit-modal-buttons {
   display: flex;
@@ -214,53 +455,55 @@
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 .edit-modal-buttons-right {
   display: flex;
   gap: 8px;
   margin-left: auto;
 }
+.add-url {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.add-url .input {
+  flex: 1;
+}
 
 /* Potvrzení smazání */
 .edit-delete-confirm {
-  background: rgba(244, 63, 94, 0.08);
-  border: 1px solid rgba(244, 63, 94, 0.4);
-  border-radius: var(--border-radius-md);
-  padding: 12px 14px;
-  font-size: 0.9rem;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-sm);
+  animation: rise 0.3s var(--ease);
 }
 .edit-delete-confirm .edit-hint {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  line-height: 1.35;
-}
-.edit-delete-confirm .buttons {
-  margin-bottom: 0;
-}
-.edit-delete-confirm .buttons .button {
-  margin-bottom: 0;
-}
-#edit-category-btn {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid var(--panel-border) !important;
-  color: var(--text-primary) !important;
+  margin: 4px 0 14px;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 /* Fotky v modálu úprav */
 .edit-photos {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 8px;
+}
+.edit-photos .empty {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 .edit-photo-item {
   position: relative;
-  width: 84px;
-  height: 84px;
-  border-radius: var(--border-radius-md);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--panel-border);
-  background: var(--input-bg);
+  background: var(--surface-2);
+  animation: pop 0.3s var(--ease);
 }
 .edit-photo-item img {
   width: 100%;
@@ -270,61 +513,93 @@
 }
 .edit-photo-main {
   position: absolute;
-  bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-align: center;
+  bottom: 0;
   padding: 2px 0;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
 }
 .edit-photo-remove,
 .edit-photo-first {
   position: absolute;
-  top: 2px;
-  width: 1.4rem;
-  height: 1.4rem;
-  border: none;
+  top: 5px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: 50%;
-  background: rgba(11, 15, 23, 0.75);
+  background: rgba(0, 0, 0, 0.7);
   color: #fff;
-  font-size: 0.85rem;
-  line-height: 1;
   cursor: pointer;
   padding: 0;
-  transition: var(--transition-smooth);
+  transition: transform var(--fast) var(--ease), background-color var(--fast) var(--ease);
+}
+.edit-photo-remove .icon,
+.edit-photo-first .icon {
+  width: 13px;
+  height: 13px;
 }
 .edit-photo-remove {
-  right: 2px;
-  font-size: 1rem;
+  right: 5px;
 }
 .edit-photo-first {
-  left: 2px;
+  left: 5px;
 }
-.edit-photo-remove:hover {
-  background: var(--danger-color);
-}
+.edit-photo-remove:hover,
 .edit-photo-first:hover {
-  background: var(--accent-color);
-}
-
-/* Modál fotek */
-.dash-photo-modal {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-}
-.dash-photo-modal img {
-  width: 100%;
-  border-radius: 12px;
-  display: block;
+  background: #000;
+  transform: scale(1.1);
 }
 
 /* Responzivita */
-@media (max-width: 600px) {
+@media (max-width: 760px) {
+  .shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
   .dash-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .stat-card:nth-child(3) {
+    border-left: 0;
+  }
+  .stat-card:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+  .stat-num {
+    font-size: 1.6rem;
+  }
+  .dash-actions-gap {
+    display: none;
+  }
+  .dash-actions .btn:not(.btn--icon) {
+    flex: 1 1 calc(50% - 8px);
+    padding: 0 10px;
+  }
+  .dash-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .selection-bar {
+    bottom: 12px;
+    padding-left: 14px;
+    gap: 4px;
+  }
+  .selection-export-more {
+    display: none;
+  }
+}
+@media (max-width: 420px) {
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }

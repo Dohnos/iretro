@@ -88,7 +88,7 @@ python -m http.server 8000
 - Dashboard: <http://localhost:8000/dashboard.html>
 
 Nejdřív se přihlásíš (Firebase Auth). Pak projdi appku
-(zadej ID → 3 fotky → detaily → **Přidat produkt** → **Odeslat**).
+(zadej ID → aspoň 3 fotky → detaily → **Přidat produkt** → **Odeslat**).
 Produkt musí naskočit v **dashboardu**. 🎉
 
 ## 🕓 Zpětné (ruční) přidávání produktů
@@ -103,13 +103,42 @@ Co se v tomhle režimu změní:
 - **Datum přidání** – vyplníš vlastní datum, nebo se doplní automaticky podle
   data pořízení první vybrané fotky. Uloží se do databáze (`date_added`
   i `created_at`), takže produkt je v dashboardu u správného dne.
-- **Stačí 1 fotka** – nemusíš mít všechny 3 (v režimu focení jsou 3 dál povinné).
+- **Stačí 1 fotka** – nemusíš mít 3 (v režimu focení jsou 3 dál povinné).
 - **Uložit do databáze (bez Excelu)** – v posledním kroku přibylo tlačítko,
   které produkty jen zapíše do Firestore, bez generování Excelu a odesílání
   přes WhatsApp. Excel si pak kdykoli vyexportuješ z dashboardu.
 
 ID produktů se chovají stejně jako při focení – navazují na nejvyšší už použité
 ID a nejde je použít podruhé.
+
+## 📝 Poznámka k předmětu
+V kroku **Detaily** je volitelné pole *Poznámka k předmětu*. Když ho vyplníš,
+vloží se do popisu nabídky jako **první sekce** (hned pod logo, nad „Nabízené
+zboží“); prázdná poznámka se do popisu nepromítne vůbec. Šablona popisu je
+v souboru **`description.js`** – sdílí ji appka i dashboard, takže se upravuje
+na jednom místě.
+
+Poznámka jde změnit i později v dashboardu (**Upravit**). Popis nabídky se
+při tom vygeneruje znovu z aktuální šablony – a jen tehdy; úprava ceny nebo
+umístění uložený popis nepřepisuje.
+
+## 📸 Víc než 3 fotky
+Povinné jsou dál 3 fotky (ve zpětném režimu 1), ale přidat jich jde až
+**12** (`MAX_PHOTOS` v `script.js`). Po třetí fotce appka přejde na detaily
+jako dřív; další fotky se přidávají přímo tam dlaždicemi **Vyfotit** /
+**Z galerie**. Všechny se nahrají na Cloudinary při přidání produktu.
+
+## ☑️ Export jen vybraných produktů
+Každá karta v dashboardu má vlevo nahoře zaškrtávátko. Jakmile něco označíš,
+vyjede dole lišta s počtem a tlačítkem **Exportovat vybrané** – do Excelu
+půjdou přesně označené produkty (i prodané, pokud si je vybereš).
+**Vybrat vše** označí to, co je právě vidět po hledání a filtru.
+Tlačítko **Export všech neprodaných** funguje jako dřív.
+
+## 🎨 Vzhled
+Appka i dashboard mají vlastní černobílý design bez CSS frameworku
+(`styles.css` + `dashboard.css`) a čárové SVG ikony z **`icons.js`** –
+nic z toho nepotřebuje CDN. Světlý/tmavý režim přepíná tlačítko vpravo nahoře.
 
 ## ✏️ Úprava produktů v databázi
 V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
@@ -119,6 +148,7 @@ V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou zm�
 | Název | formát pro Aukro je `NÁZEV \| ID` |
 | Cena | |
 | Umístění | zároveň se přepočítá `extId` (`umístění \| ID`) |
+| Poznámka | při změně se přegeneruje popis nabídky |
 | Datum přidání | mění `date_added` i `created_at` (dashboard podle něj řadí) |
 | Kategorie | výběr s hledáním z `MapaKat.txt` |
 | Doprava | stejný seznam jako v appce; neznámé ID u starších produktů se doplní |
