@@ -143,15 +143,19 @@ zůstane otevřený a další **Uložit** nahraje jen to, co ještě chybí.
 
 ## 📄 Export pro Aukro (CSV)
 Oba exporty – soubor poslaný přes WhatsApp i stažení z dashboardu – jsou
-**CSV v UTF-8** (oddělovač čárka, s BOM, aby Excel správně ukázal háčky).
-Skládá je `export.js`.
+**CSV v UTF-8** ve formátu, který Aukro při importu přijalo. Skládá je
+`export.js`:
+
+- UTF-8 **bez BOM** (se značkou BOM Aukro nepoznalo sloupec `entityId`),
+- oddělovač čárka, mezi řádky CRLF, za posledním řádkem nic,
+- v HTML popisu `&` místo `&amp;` (v databázi zůstává popis beze změny).
 
 - **entityId** se v každém souboru čísluje znovu: první řádek **1**,
   druhý **2** … poslední **N** (u 10 produktů 1–10). Je tak vždy unikátní.
 - Pořadí řádků: v appce podle toho, jak byly produkty přidané; v dashboardu
   podle čísla ID od nejnižšího (RA01 → entityId 1).
 - Popis nabídky (HTML s uvozovkami) je v CSV správně uzavřený v uvozovkách.
-- `priorityListing`, `boldTitle`, `highlight` jsou zapsané jako `true` / `false`.
+- `priorityListing`, `boldTitle`, `highlight` jsou zapsané jako `TRUE` / `FALSE`.
 
 ## 🎨 Vzhled
 Appka i dashboard mají vlastní černobílý design bez CSS frameworku
