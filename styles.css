@@ -437,7 +437,11 @@ code {
   text-transform: uppercase;
   color: var(--muted);
 }
+.label {
+  flex-wrap: wrap;
+}
 .label small {
+  white-space: nowrap;
   font-size: inherit;
   font-weight: 500;
   letter-spacing: 0.02em;

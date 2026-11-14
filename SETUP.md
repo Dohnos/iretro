@@ -156,7 +156,9 @@ Oba exporty – soubor poslaný přes WhatsApp i stažení z dashboardu – jsou
   okno s volbou data a času začátku, seznamem produktů v pořadí exportu
   (s kategorií, cenou a časem) a souhrnem kategorií. Upozorní na produkty
   bez kategorie, fotky či ceny a na prodané ve výběru; čas v minulosti
-  stažení zablokuje.
+  stažení zablokuje. **Klepnutím na produkt** v seznamu se otevře jeho
+  úprava (kategorie, cena, fotky…); po uložení se kontrola sama přepočítá
+  a upravený řádek krátce blikne.
 - **WhatsApp z appky** bere jako začátek nejbližší celou hodinu (čas je
   vidět v potvrzovacím dialogu), dál po 2 minutách.
 - **entityId** se v každém souboru čísluje znovu: první řádek **1**,

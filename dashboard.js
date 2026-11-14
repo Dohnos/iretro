@@ -726,6 +726,10 @@ async function saveEdit() {
   closeEdit();
   updateStats();
   render();
+  if (exportJob) {
+    exportJob.lastEditedId = p._docId;
+    renderExportReview();
+  }
   showStatus(
     `Produkt ${p.product_id || ""} upraven` +
       (uploaded ? ` · nahráno ${window.pluralCz(uploaded, "nová fotka", "nové fotky", "nových fotek")}.` : "."),
@@ -764,6 +768,11 @@ async function deleteProduct() {
   closeEdit();
   updateStats();
   render();
+  if (exportJob) {
+    exportJob.items = exportJob.items.filter((x) => x !== p);
+    if (exportJob.items.length) renderExportReview();
+    else closeExportReview();
+  }
   showStatus(`Produkt ${label} byl smazán z databáze.`, "warning", 4000);
 }
 
@@ -943,16 +952,22 @@ function renderExportReview() {
     const li = document.createElement("li");
     const cat = categoryLabel(p);
     const img = imagesOf(p)[0];
-    li.className = "export-item" + (!cat || !img ? " has-issue" : "");
+    li.className = "export-item" + (!cat || !img ? " has-issue" : "") +
+      (p._docId === exportJob.lastEditedId ? " is-updated" : "");
+    // Celý řádek je tlačítko: otevře úpravu produktu nad kontrolou exportu.
     li.innerHTML = `
-      <span class="export-n">${i + 1}</span>
-      <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon("image")}</span>
-      <span class="export-info">
-        <span class="export-name"><b>${escapeHtml(p.product_id || "—")}</b> ${escapeHtml(displayName(p))}</span>
-        <span class="export-meta">${p.price != null ? escapeHtml(p.price) + " Kč" : "bez ceny"} · ${escapeHtml(cat || "Bez kategorie")}</span>
-      </span>
-      <time class="export-time">${start ? fmtTime(window.exportStartFor(start, i)) : "–"}</time>
+      <button type="button" class="export-item-btn" title="Upravit ${escapeHtml(p.product_id || "produkt")}">
+        <span class="export-n">${i + 1}</span>
+        <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon("image")}</span>
+        <span class="export-info">
+          <span class="export-name"><b>${escapeHtml(p.product_id || "—")}</b> ${escapeHtml(displayName(p))}</span>
+          <span class="export-meta">${p.price != null ? escapeHtml(p.price) + " Kč" : "bez ceny"} · ${escapeHtml(cat || "Bez kategorie")}</span>
+        </span>
+        <time class="export-time">${start ? fmtTime(window.exportStartFor(start, i)) : "–"}</time>
+        <span class="export-edit">${window.icon("pencil")}</span>
+      </button>
     `;
+    li.querySelector("button").addEventListener("click", () => openEdit(p));
     exportListElem.appendChild(li);
   });
 
@@ -1080,8 +1095,12 @@ document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   // Ořez fotky má vlastní tlačítka; Escape by pod ním zavřel celou úpravu.
   if (document.querySelector("#crop-modal.is-active")) return;
+  // Zavírá se jen horní okno: úprava otevřená z kontroly exportu nejdřív.
+  if (editModal.classList.contains("is-active")) {
+    closeEdit();
+    return;
+  }
   closePhotos();
-  closeEdit();
   closeExportReview();
 });
 
