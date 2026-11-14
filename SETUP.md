@@ -194,6 +194,12 @@ a které ID **v databázi není**. Teprve tlačítko **Označit prodané (N)**
 zapíše vše najednou (`sold: true`, `sold_at`). Omylem označený produkt
 vrátíš na kartě tlačítkem **Vrátit**.
 
+**Kupující Aledas a Ebisu:** když je u aukce v textu „Kupující: Aledas“
+nebo „Kupující: Ebisu“ (na velikosti písmen nezáleží), produkt se jako
+prodaný **neoznačí** – v náhledu je u něj varování „neoznačí se“ a po
+uložení hláška vyjmenuje, co bylo přeskočeno. Seznam jmen je
+v `dashboard.js` (`BULK_SOLD_SKIP_BUYERS`).
+
 ## ✏️ Úprava produktů v databázi
 V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
 

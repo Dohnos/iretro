@@ -355,6 +355,7 @@ const bulkSoldModal = document.getElementById("bulk-sold-modal");
 const bulkSoldInput = document.getElementById("bulk-sold-input");
 const bulkSoldSummary = document.getElementById("bulk-sold-summary");
 const bulkSoldList = document.getElementById("bulk-sold-list");
+const bulkSoldWarning = document.getElementById("bulk-sold-warning");
 const bulkSoldConfirm = document.getElementById("bulk-sold-confirm");
 const bulkSoldConfirmText = document.getElementById("bulk-sold-confirm-text");
 let bulkSoldPlan = null; // { toMark: [produkty], ... } z posledního rozboru textu
@@ -371,6 +372,10 @@ function productIdKey(p) {
 // Z vloženého textu vytáhne ID v pořadí, jak jsou v textu, bez duplicit.
 // Bere „| RA86“ (i když je ID až na dalším řádku, jak se to zalomí
 // při kopírování z mobilu) a řádek, na kterém je jen samotné ID.
+//
+// U každého ID zjistí i kupujícího: v textu z Aukra je „Kupující: jméno“
+// vždy za názvem aukce, takže se hledá v úseku od ID do dalšího ID.
+// Vrací [{ key: "RA86", buyer: "lubomir87" | null }].
 function parseSoldIds(text) {
   const src = String(text || "");
   const hits = [];
@@ -383,7 +388,23 @@ function parseSoldIds(text) {
     while ((m = re.exec(src))) hits.push({ at: m.index, key: idKey(m[1], m[2]) });
   });
   hits.sort((a, b) => a.at - b.at);
-  return Array.from(new Set(hits.map((h) => h.key)));
+
+  const byKey = new Map();
+  hits.forEach((h, i) => {
+    const segment = src.slice(h.at, i + 1 < hits.length ? hits[i + 1].at : src.length);
+    // Jen „Kupující:“ s dvojtečkou – řádek „Kupující 1“ je počet kupujících.
+    const bm = /Kupuj[ií]c[ií]\s*:\s*([^\s(]+)/i.exec(segment);
+    const buyer = bm ? bm[1] : null;
+    if (!byKey.has(h.key)) byKey.set(h.key, { key: h.key, buyer });
+    else if (buyer && !byKey.get(h.key).buyer) byKey.get(h.key).buyer = buyer;
+  });
+  return Array.from(byKey.values());
+}
+
+// Kupující, u kterých se předmět jako prodaný NEoznačí – jen se upozorní.
+const BULK_SOLD_SKIP_BUYERS = ["aledas", "ebisu"];
+function isSkippedBuyer(buyer) {
+  return !!buyer && BULK_SOLD_SKIP_BUYERS.includes(String(buyer).toLowerCase());
 }
 
 function openBulkSold() {
@@ -406,15 +427,18 @@ function renderBulkSold() {
     if (key) byKey.set(key, p);
   });
 
-  const rows = ids.map((key) => {
+  const rows = ids.map(({ key, buyer }) => {
     const p = byKey.get(key);
-    if (!p) return { key, p: null, status: "missing" };
-    return { key, p, status: p.sold ? "already" : "mark" };
+    if (!p) return { key, buyer, p: null, status: "missing" };
+    // Kupující Aledas / Ebisu: neoznačovat, jen varovat.
+    if (isSkippedBuyer(buyer)) return { key, buyer, p, status: "skipped" };
+    return { key, buyer, p, status: p.sold ? "already" : "mark" };
   });
   const toMark = rows.filter((r) => r.status === "mark").map((r) => r.p);
+  const skipped = rows.filter((r) => r.status === "skipped");
   const already = rows.filter((r) => r.status === "already").length;
   const missing = rows.filter((r) => r.status === "missing").length;
-  bulkSoldPlan = { toMark };
+  bulkSoldPlan = { toMark, skipped };
 
   // Souhrn
   if (!ids.length) {
@@ -424,14 +448,30 @@ function renderBulkSold() {
     bulkSoldSummary.classList.remove("is-hidden");
     const parts = [`Nalezeno ${window.pluralCz(ids.length, "ID", "ID", "ID")}`];
     parts.push(`označí se ${toMark.length}`);
+    if (skipped.length) parts.push(`přeskočeno kvůli kupujícímu ${skipped.length}`);
     if (already) parts.push(`už prodané ${already}`);
     if (missing) parts.push(`nenalezeno ${missing}`);
     bulkSoldSummary.textContent = parts.join(" · ");
   }
 
+  // Varování: kupující, u kterých se neoznačuje.
+  bulkSoldWarning.innerHTML = "";
+  if (skipped.length) {
+    const p = document.createElement("p");
+    p.className = "export-issue export-issue--warning";
+    p.innerHTML = window.icon("alert");
+    p.appendChild(document.createTextNode(
+      "Neoznačí se jako prodané (kupující " +
+        skipped.map((r) => `${r.buyer}: ${r.p.product_id}`).join(", ") +
+        ")."
+    ));
+    bulkSoldWarning.appendChild(p);
+  }
+  bulkSoldWarning.classList.toggle("is-hidden", !skipped.length);
+
   // Seznam: nejdřív co se označí, pak ostatní
-  const order = { mark: 0, already: 1, missing: 2 };
-  const LABEL = { mark: "označí se", already: "už prodaný", missing: "není v databázi" };
+  const order = { mark: 0, skipped: 1, already: 2, missing: 3 };
+  const LABEL = { mark: "označí se", skipped: "neoznačí se", already: "už prodaný", missing: "není v databázi" };
   bulkSoldList.innerHTML = "";
   rows
     .slice()
@@ -444,9 +484,19 @@ function renderBulkSold() {
         <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon(r.p ? "image" : "x")}</span>
         <span class="export-info">
           <span class="export-name"><b>${escapeHtml(r.p ? r.p.product_id : r.key)}</b> ${r.p ? escapeHtml(displayName(r.p)) : ""}</span>
-          <span class="export-meta">${r.p && r.p.price != null ? escapeHtml(r.p.price) + " Kč" : r.p ? "bez ceny" : "Zkontroluj ID – produkt s ním v databázi není."}</span>
+          <span class="export-meta">${
+            r.status === "skipped"
+              ? `Kupující ${escapeHtml(r.buyer)} – zůstane neprodaný${r.p.sold ? " (v databázi už je prodaný)" : ""}`
+              : r.p && r.p.price != null
+                ? escapeHtml(r.p.price) + " Kč" + (r.buyer ? " · " + escapeHtml(r.buyer) : "")
+                : r.p
+                  ? "bez ceny"
+                  : "Zkontroluj ID – produkt s ním v databázi není."
+          }</span>
         </span>
-        <span class="bulk-status">${r.status === "mark" ? window.icon("check") : ""}${LABEL[r.status]}</span>
+        <span class="bulk-status">${
+          r.status === "mark" ? window.icon("check") : r.status === "skipped" ? window.icon("alert") : ""
+        }${LABEL[r.status]}</span>
       `;
       bulkSoldList.appendChild(li);
     });
@@ -459,6 +509,7 @@ function renderBulkSold() {
 async function confirmBulkSold() {
   if (!window.db || !bulkSoldPlan || !bulkSoldPlan.toMark.length) return;
   const items = bulkSoldPlan.toMark.slice();
+  const skipped = bulkSoldPlan.skipped || [];
   const soldAt = new Date().toISOString();
 
   bulkSoldConfirm.classList.add("is-loading");
@@ -486,9 +537,12 @@ async function confirmBulkSold() {
   updateStats();
   render();
   showStatus(
-    `Označeno jako prodané: ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} (${items.map((p) => p.product_id).join(", ")}).`,
-    "success",
-    6000
+    `Označeno jako prodané: ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} (${items.map((p) => p.product_id).join(", ")}).` +
+      (skipped.length
+        ? ` Přeskočeno kvůli kupujícímu: ${skipped.map((r) => `${r.p.product_id} (${r.buyer})`).join(", ")}.`
+        : ""),
+    skipped.length ? "warning" : "success",
+    skipped.length ? 9000 : 6000
   );
 }
 

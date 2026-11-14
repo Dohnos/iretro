@@ -915,6 +915,14 @@
 .bulk-item--already .bulk-status {
   border: 1px solid var(--line-strong);
 }
+/* Kupující Aledas / Ebisu: neoznačí se, výrazné varování. */
+.bulk-item--skipped .bulk-status {
+  border: 1.5px solid var(--fg);
+}
+.bulk-item--skipped .export-meta {
+  color: var(--fg);
+  font-weight: 600;
+}
 .bulk-item--missing .bulk-status {
   border: 1px dashed var(--fg);
 }
