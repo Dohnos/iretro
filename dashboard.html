@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>iAUKRO – Dashboard</title>
 
   <!-- Písmo -->
@@ -16,6 +16,7 @@
 
   <!-- Ikony + přepínač světlý/tmavý režim (nastaví motiv co nejdřív) -->
   <script src="icons.js"></script>
+  <script src="ui.js"></script>
   <script src="theme.js"></script>
 
   <!-- Knihovna XLSX (export Excelu) -->
@@ -36,6 +37,8 @@
       <a class="brand" href="dashboard.html">
         <i data-icon="grid"></i> iAUKRO <span class="brand-sub">Dashboard</span>
       </a>
+      <!-- Odhlásit a přepínač motivu sem doplní auth-gate.js a theme.js -->
+      <div class="topbar-actions" data-topbar-actions></div>
     </header>
 
     <div class="dash-actions">
@@ -78,7 +81,7 @@
     <div class="dash-toolbar">
       <div class="search">
         <i data-icon="search"></i>
-        <input id="search" class="input" type="search" placeholder="Hledej podle ID nebo názvu" />
+        <input id="search" class="input" type="search" placeholder="Hledej ID, název, umístění…" />
       </div>
       <label class="switch">
         <input type="checkbox" id="hide-sold" />
@@ -91,7 +94,8 @@
     </div>
 
     <!-- Stavová hláška -->
-    <div id="status-msg" class="status is-hidden" role="status" aria-live="polite"></div>
+    <!-- Stavová hláška (plovoucí, ať je vidět i po odscrollování) -->
+    <div id="status-msg" class="status dash-toast is-hidden" role="status" aria-live="polite"></div>
 
     <!-- Seznam produktů -->
     <div id="products-container" class="dash-grid"></div>
@@ -101,7 +105,9 @@
   <!-- Lišta výběru: objeví se, jakmile je označený aspoň jeden produkt -->
   <div id="selection-bar" class="selection-bar" aria-hidden="true">
     <span class="selection-count"><strong id="selection-count">0</strong> vybráno</span>
-    <button id="selection-clear-btn" class="btn btn--sm selection-clear">Zrušit výběr</button>
+    <button id="selection-clear-btn" class="btn btn--sm selection-clear" title="Zrušit výběr" aria-label="Zrušit výběr">
+      <i data-icon="x"></i><span class="selection-clear-label">Zrušit výběr</span>
+    </button>
     <button id="export-selected-btn" class="btn btn--sm selection-export">
       <i data-icon="download"></i> Exportovat<span class="selection-export-more">&nbsp;vybrané</span>
     </button>
@@ -215,19 +221,27 @@
           </div>
         </div>
 
-        <!-- Fotky -->
+        <!-- Fotky: nové se ořežou a nahrají na Cloudinary až při uložení -->
         <div class="field">
-          <span class="label">Fotky</span>
+          <span class="label">Fotky <small id="edit-photo-count"></small></span>
           <div id="edit-photos" class="edit-photos"></div>
-          <div class="add-url">
-            <input id="edit-photo-url" type="url" class="input" placeholder="https://… odkaz na fotku" />
-            <button type="button" id="edit-photo-add" class="btn btn--ghost">Přidat</button>
-          </div>
-          <p class="help">První fotka je náhled i hlavní obrázek v Aukru.</p>
+          <input type="file" id="edit-photo-camera" accept="image/*" capture="camera" class="is-hidden" />
+          <input type="file" id="edit-photo-gallery" accept="image/*" multiple class="is-hidden" />
+          <p class="help">
+            První fotka je náhled i hlavní obrázek v Aukru. Nové fotky se nahrají
+            na Cloudinary po kliknutí na Uložit.
+          </p>
+          <details class="add-url-toggle">
+            <summary>Vložit fotku odkazem</summary>
+            <div class="add-url">
+              <input id="edit-photo-url" type="url" class="input" placeholder="https://… odkaz na fotku" />
+              <button type="button" id="edit-photo-add" class="btn btn--ghost">Přidat</button>
+            </div>
+          </details>
         </div>
 
         <!-- Chybová hláška -->
-        <p id="edit-error" class="edit-error"></p>
+        <p id="edit-error" class="edit-error" role="alert"></p>
 
         <!-- Potvrzení smazání -->
         <div id="edit-delete-confirm" class="edit-delete-confirm is-hidden">
@@ -244,9 +258,11 @@
           </div>
         </div>
 
+        <!-- Lišta akcí je přilepená ke spodku modálu, ať je Uložit vždy po ruce -->
         <div class="edit-modal-buttons">
-          <button type="button" id="edit-delete-btn" class="btn btn--danger">
-            <i data-icon="trash"></i> Smazat
+          <p id="edit-progress" class="edit-progress is-hidden" aria-live="polite"></p>
+          <button type="button" id="edit-delete-btn" class="btn btn--danger" title="Smazat produkt" aria-label="Smazat produkt">
+            <i data-icon="trash"></i><span class="btn-label">Smazat</span>
           </button>
           <span class="edit-modal-buttons-right">
             <button type="button" id="edit-cancel-btn" class="btn btn--ghost">Zrušit</button>
@@ -261,6 +277,7 @@
 
   <script src="categories.js"></script>
   <script src="description.js"></script>
+  <script src="photos.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

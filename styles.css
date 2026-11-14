@@ -134,6 +134,10 @@ code {
   max-width: 520px;
   margin: 0 auto;
   padding: 20px 20px 72px;
+  /* iPhone na šířku: obsah nesmí vjet pod výřez */
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
 
 .topbar {
@@ -142,6 +146,8 @@ code {
   justify-content: space-between;
   gap: 12px;
   padding: 6px 0 22px;
+  /* iPhone s výřezem: hlavička nesmí vjet pod stavový řádek */
+  padding-top: max(6px, env(safe-area-inset-top));
 }
 
 .brand {
@@ -162,6 +168,26 @@ code {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: none;
+}
+/* Tlačítka v hlavičce: stejná výška, kulaté (Dashboard, Odhlásit, motiv).
+   Vyšší specifičnost, ať je nepřebije .btn--sm/.btn--icon definované níž. */
+.topbar-actions .topbar-btn {
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+}
+.topbar-actions .topbar-btn.btn--icon {
+  width: 40px;
+}
+/* Na úzkém displeji zůstanou v hlavičce jen ikony (popisek je v title). */
+@media (max-width: 480px) {
+  .topbar-actions .topbar-btn .btn-label {
+    display: none;
+  }
+  .topbar-actions .topbar-btn {
+    width: 40px;
+    padding: 0;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -996,9 +1022,17 @@ progress.upload-progress::-moz-progress-bar {
 }
 
 /* --------------------------------------------------------------------------
-   Přepínač motivu + odhlášení (plovoucí vpravo nahoře)
+   Přepínač motivu
+   V hlavičce je to běžné kulaté tlačítko; .is-floating je záloha pro
+   stránky bez hlavičky (plave vpravo nahoře).
    -------------------------------------------------------------------------- */
-.theme-toggle {
+.theme-toggle:active {
+  transform: scale(0.92) rotate(-20deg);
+}
+.theme-toggle .icon {
+  animation: pop 0.35s var(--ease);
+}
+.theme-toggle.is-floating {
   position: fixed;
   top: 14px;
   right: 14px;
@@ -1015,19 +1049,14 @@ progress.upload-progress::-moz-progress-bar {
   cursor: pointer;
   transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
-.theme-toggle:hover {
+.theme-toggle.is-floating:hover {
   border-color: var(--fg);
 }
-.theme-toggle:active {
-  transform: scale(0.92) rotate(-20deg);
-}
-.theme-toggle .icon {
-  animation: pop 0.35s var(--ease);
-}
 
-/* Místo pro plovoucí tlačítka, ať nepřekrývají hlavičku. */
-.topbar {
-  padding-right: 148px;
+/* Otevřený modál: stránka pod ním se neposouvá (třídu přidává ui.js). */
+html.has-modal,
+html.has-modal body {
+  overflow: hidden;
 }
 
 /* --------------------------------------------------------------------------

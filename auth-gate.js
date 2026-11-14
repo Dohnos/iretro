@@ -54,11 +54,12 @@
     #fb-auth-btn:active{transform:scale(.98)}
     #fb-auth-btn:disabled{opacity:.5;cursor:default}
     #fb-auth-err{color:#0a0a0a;font-weight:600;font-size:.83rem;margin:12px 0 0;min-height:1em}
-    #fb-signout{position:fixed;top:14px;right:62px;z-index:150;display:none;height:40px;
+    #fb-signout.is-floating{position:fixed;top:14px;right:14px;z-index:150;height:40px;
+      display:inline-flex;align-items:center;
       background:var(--bg,#fff);color:var(--fg,#0a0a0a);border:1px solid var(--line-strong,#cfcfcf);
       border-radius:999px;padding:0 14px;font-size:.82rem;font-weight:600;cursor:pointer;
       font-family:'Inter',system-ui,sans-serif;transition:border-color .16s}
-    #fb-signout:hover{border-color:var(--fg,#0a0a0a)}
+    #fb-signout.is-floating:hover{border-color:var(--fg,#0a0a0a)}
   `;
   document.documentElement.appendChild(style);
 
@@ -79,8 +80,27 @@
 
   const signout = document.createElement("button");
   signout.id = "fb-signout";
-  signout.textContent = "Odhlásit";
+  signout.type = "button";
+  signout.title = "Odhlásit";
+  signout.setAttribute("aria-label", "Odhlásit");
+  signout.style.display = "none";
   signout.addEventListener("click", function () { auth.signOut(); });
+
+  // Tlačítko patří do hlavičky stránky (data-topbar-actions) – vedle
+  // přepínače motivu, který je vždy poslední. Kde hlavička není
+  // (migrate.html), plave vpravo nahoře.
+  function placeSignout() {
+    const slot = document.querySelector("[data-topbar-actions]");
+    if (slot && typeof window.icon === "function") {
+      signout.className = "btn btn--ghost btn--sm topbar-btn";
+      signout.innerHTML = window.icon("logout") + '<span class="btn-label">Odhlásit</span>';
+      slot.insertBefore(signout, slot.querySelector(".theme-toggle"));
+    } else {
+      signout.className = "is-floating";
+      signout.textContent = "Odhlásit";
+      document.body.appendChild(signout);
+    }
+  }
 
   function mount() {
     if (!document.body) {
@@ -88,7 +108,7 @@
       return;
     }
     document.body.appendChild(overlay);
-    document.body.appendChild(signout);
+    placeSignout();
     const form = overlay.querySelector("#fb-auth-card");
     const err = overlay.querySelector("#fb-auth-err");
     const btn = overlay.querySelector("#fb-auth-btn");
@@ -119,7 +139,7 @@
   }
 
   function showOverlay() { overlay.style.display = "flex"; signout.style.display = "none"; }
-  function hideOverlay() { overlay.style.display = "none"; signout.style.display = "block"; }
+  function hideOverlay() { overlay.style.display = "none"; signout.style.display = ""; }
 
   mount();
 

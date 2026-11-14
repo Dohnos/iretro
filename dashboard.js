@@ -140,6 +140,7 @@ async function loadProducts() {
   Array.from(selectedIds).forEach((id) => { if (!known.has(id)) selectedIds.delete(id); });
 
   updateStats();
+  animateNextRender = true;
   render();
 }
 
@@ -147,7 +148,7 @@ async function loadProducts() {
 function updateStats() {
   const total = allProducts.length;
   const soldCount = allProducts.filter((p) => p.sold).length;
-  const today = new Date().toISOString().split("T")[0];
+  const today = window.localDateString();
   const todayCount = allProducts.filter(
     (p) => p.date_added === today || (p.created_at && String(p.created_at).startsWith(today))
   ).length;
@@ -176,16 +177,49 @@ function visibleProducts() {
   return allProducts.filter((p) => {
     if (hideSold && p.sold) return false;
     if (!q) return true;
-    return (
-      (p.product_id && p.product_id.toLowerCase().includes(q)) ||
-      (p.name && p.name.toLowerCase().includes(q))
+    return [p.product_id, p.name, p.location, noteOf(p)].some(
+      (v) => v && String(v).toLowerCase().includes(q)
     );
   });
 }
 
+// Název bez koncového „| ID“ – ID je na kartě vedle v kolečku, nemusí být dvakrát.
+function displayName(p) {
+  const name = String(p.name || "");
+  if (!p.product_id) return name;
+  const suffix = new RegExp("\\s*\\|\\s*" + p.product_id + "\\s*$", "i");
+  return name.replace(suffix, "") || name;
+}
+
+// Obrázek, který při chybě náhledu (např. vypnuté transformace na
+// Cloudinary) přepne na originál.
+function thumbImg(url, size, alt, extra) {
+  const small = window.cloudinaryThumb(url, size);
+  const fallback = small !== url ? ` data-full="${escapeHtml(url)}"` : "";
+  return `<img src="${escapeHtml(small)}"${fallback} alt="${escapeHtml(alt)}" ${extra || ""} />`;
+}
+// Jeden posluchač pro všechny náhledy (error události nebublají, proto capture).
+document.addEventListener(
+  "error",
+  (e) => {
+    const img = e.target;
+    if (img && img.tagName === "IMG" && img.dataset && img.dataset.full) {
+      img.src = img.dataset.full;
+      delete img.dataset.full;
+    }
+  },
+  true
+);
+
+// Karty najíždějí jen při načtení dat. Při hledání, filtru nebo změně
+// jedné karty by opakovaná animace celé mřížky jen blikala.
+let animateNextRender = true;
+
 function render() {
   const list = visibleProducts();
 
+  container.classList.toggle("no-anim", !animateNextRender);
+  animateNextRender = false;
   container.innerHTML = "";
   if (!list.length) {
     container.innerHTML = `<p class="dash-empty">Žádné produkty k zobrazení.</p>`;
@@ -207,8 +241,10 @@ function card(p, index) {
   const note = noteOf(p);
 
   el.innerHTML = `
-    <div class="prod-thumb" ${thumb ? `style="background-image:url('${escapeHtml(thumb)}')"` : ""}>
-      ${thumb ? "" : window.icon("image")}
+    <div class="prod-thumb">
+      ${thumb
+        ? thumbImg(thumb, 480, displayName(p), 'loading="lazy" decoding="async"')
+        : window.icon("image")}
       <label class="prod-select" title="Vybrat k exportu">
         <input type="checkbox" ${selectedIds.has(p._docId) ? "checked" : ""}
                aria-label="Vybrat ${escapeHtml(p.product_id || "produkt")} k exportu" />
@@ -222,7 +258,7 @@ function card(p, index) {
         <span class="prod-id">${escapeHtml(p.product_id || "—")}</span>
         <span class="prod-price">${p.price != null ? escapeHtml(p.price) + " Kč" : "—"}</span>
       </div>
-      <div class="prod-name">${escapeHtml(p.name || "")}</div>
+      <div class="prod-name" title="${escapeHtml(p.name || "")}">${escapeHtml(displayName(p))}</div>
       <div class="prod-meta">
         <span>${window.icon("pin")}${escapeHtml(p.location || "—")}</span>
         <span>${window.icon("calendar")}${fmtDate(p.created_at)}</span>
@@ -333,7 +369,8 @@ async function toggleSold(p, btn) {
    nerozejde.
    ==========================================================*/
 let editingProduct = null;   // produkt otevřený v modálu
-let editPhotos = [];         // rozpracovaný seznam fotek
+let editPhotos = [];         // rozpracovaný seznam fotek: { url } nebo { file, preview }
+let editSaving = false;      // během ukládání (a nahrávání fotek) se modál nezavírá
 let categoryGroups = [];     // kategorie z MapaKat.txt
 
 const editModal = document.getElementById("edit-modal");
@@ -353,6 +390,10 @@ const editPromoPriority = document.getElementById("edit-promo-priority");
 const editPromoBold = document.getElementById("edit-promo-bold");
 const editPromoHighlight = document.getElementById("edit-promo-highlight");
 const editPhotosBox = document.getElementById("edit-photos");
+const editPhotoCountElem = document.getElementById("edit-photo-count");
+const editPhotoCamera = document.getElementById("edit-photo-camera");
+const editPhotoGallery = document.getElementById("edit-photo-gallery");
+const editProgressElem = document.getElementById("edit-progress");
 const editPhotoUrlInput = document.getElementById("edit-photo-url");
 const editPhotoAddBtn = document.getElementById("edit-photo-add");
 const editErrorElem = document.getElementById("edit-error");
@@ -433,29 +474,54 @@ function renderCategoryList(query) {
   }
 }
 
+// Položka v editPhotos je buď už nahraná fotka { url }, nebo nová
+// { file, preview } – ta se nahraje na Cloudinary až při uložení, takže
+// zrušená úprava nenechá na Cloudinary nic navíc.
+function pendingPhotoCount() {
+  return editPhotos.filter((ph) => ph.file).length;
+}
+
+function revokePreviews(list) {
+  list.forEach((ph) => { if (ph.preview) URL.revokeObjectURL(ph.preview); });
+}
+
+function buildAddTile(iconName, label, onClick) {
+  const tile = document.createElement("button");
+  tile.type = "button";
+  tile.className = "photo-add-tile";
+  tile.innerHTML = window.icon(iconName) + `<span>${label}</span>`;
+  tile.addEventListener("click", onClick);
+  return tile;
+}
+
 function renderEditPhotos() {
   editPhotosBox.innerHTML = "";
-  if (!editPhotos.length) {
-    editPhotosBox.innerHTML = `<p class="empty">Žádné fotky.</p>`;
-    return;
-  }
-  editPhotos.forEach((url, index) => {
+  const pending = pendingPhotoCount();
+  editPhotoCountElem.textContent =
+    `${editPhotos.length} z max. ${window.MAX_PHOTOS}` + (pending ? ` · ${pending} k nahrání` : "");
+
+  editPhotos.forEach((ph, index) => {
     const item = document.createElement("div");
-    item.className = "edit-photo-item";
-    item.innerHTML = `
-      <img src="${escapeHtml(url)}" alt="foto ${index + 1}" />
-      ${index === 0 ? '<span class="edit-photo-main">hlavní</span>' : ""}
-    `;
+    item.className = "edit-photo-item" + (ph.file ? " is-pending" : "");
+    item.innerHTML =
+      (ph.file
+        ? `<img src="${ph.preview}" alt="nová fotka ${index + 1}" />`
+        : thumbImg(ph.url, 240, `fotka ${index + 1}`, 'decoding="async"')) +
+      // Jeden štítek dole: hlavní / nová / hlavní · nová
+      ((index === 0 || ph.file)
+        ? `<span class="edit-photo-main">${[index === 0 ? "hlavní" : "", ph.file ? "nová" : ""].filter(Boolean).join(" · ")}</span>`
+        : "");
 
     if (index > 0) {
       const firstBtn = document.createElement("button");
       firstBtn.type = "button";
       firstBtn.className = "edit-photo-first";
       firstBtn.title = "Dát jako hlavní";
+      firstBtn.setAttribute("aria-label", "Dát jako hlavní");
       firstBtn.innerHTML = window.icon("star");
       firstBtn.addEventListener("click", () => {
         editPhotos.splice(index, 1);
-        editPhotos.unshift(url);
+        editPhotos.unshift(ph);
         renderEditPhotos();
       });
       item.appendChild(firstBtn);
@@ -465,20 +531,56 @@ function renderEditPhotos() {
     removeBtn.type = "button";
     removeBtn.className = "edit-photo-remove";
     removeBtn.title = "Odebrat fotku";
+    removeBtn.setAttribute("aria-label", "Odebrat fotku");
     removeBtn.innerHTML = window.icon("x");
     removeBtn.addEventListener("click", () => {
-      editPhotos.splice(index, 1);
+      revokePreviews(editPhotos.splice(index, 1));
       renderEditPhotos();
     });
     item.appendChild(removeBtn);
 
     editPhotosBox.appendChild(item);
   });
+
+  if (editPhotos.length < window.MAX_PHOTOS) {
+    editPhotosBox.appendChild(buildAddTile("camera", "Vyfotit", () => editPhotoCamera.click()));
+    editPhotosBox.appendChild(buildAddTile("images", "Z galerie", () => editPhotoGallery.click()));
+  }
+}
+
+// Nové fotky: každou nejdřív ořízneme (stejně jako v appce), pak čeká na uložení.
+async function addEditPhotoFiles(fileList) {
+  const files = Array.from(fileList || []);
+  let skipped = false;
+  for (let i = 0; i < files.length; i++) {
+    if (!editingProduct) return; // modál mezitím zavřený
+    if (editPhotos.length >= window.MAX_PHOTOS) {
+      skipped = true;
+      break;
+    }
+    const cropped = await window.cropImageInteractive(files[i], `Fotka ${editPhotos.length + 1}`);
+    if (cropped) {
+      editPhotos.push({ file: cropped, preview: URL.createObjectURL(cropped) });
+      renderEditPhotos();
+    }
+  }
+  editErrorElem.textContent = skipped
+    ? `Na produkt jde nejvýš ${window.MAX_PHOTOS} fotek – zbytek přeskočen.`
+    : "";
+}
+
+function setEditBusy(busy, message) {
+  editSaving = busy;
+  [editSaveBtn, editCancelBtn, editDeleteBtn].forEach((b) => { b.disabled = busy; });
+  editSaveBtn.classList.toggle("is-loading", busy);
+  editModal.classList.toggle("is-busy", busy);
+  editProgressElem.textContent = message || "";
+  editProgressElem.classList.toggle("is-hidden", !message);
 }
 
 function openEdit(p) {
   editingProduct = p;
-  editPhotos = imagesOf(p).slice();
+  editPhotos = imagesOf(p).map((url) => ({ url }));
 
   document.getElementById("edit-product-id").textContent = p.product_id || "—";
   editNameInput.value = p.name || "";
@@ -510,6 +612,7 @@ function openEdit(p) {
   editPhotoUrlInput.value = "";
   editErrorElem.textContent = "";
   editDeleteConfirm.classList.add("is-hidden");
+  setEditBusy(false);
   renderEditPhotos();
 
   editModal.classList.add("is-active");
@@ -517,12 +620,15 @@ function openEdit(p) {
 }
 
 function closeEdit() {
+  if (editSaving) return; // nahrávání/ukládání nejde přerušit zavřením
   editModal.classList.remove("is-active");
   editingProduct = null;
+  revokePreviews(editPhotos);
+  editPhotos = [];
 }
 
 async function saveEdit() {
-  if (!editingProduct || !window.db) return;
+  if (!editingProduct || !window.db || editSaving) return;
   const p = editingProduct;
 
   const name = editNameInput.value.trim();
@@ -534,19 +640,43 @@ async function saveEdit() {
   const shippingId = editShippingSelect.value;
 
   if (!name) {
-    editErrorElem.textContent = "Název nesmí být prázdný.";
+    showEditError("Název nesmí být prázdný.", editNameInput);
     return;
   }
   if (priceRaw === "" || isNaN(parseInt(priceRaw, 10))) {
-    editErrorElem.textContent = "Zadej cenu číslem.";
+    showEditError("Zadej cenu číslem.", editPriceInput);
     return;
   }
   editErrorElem.textContent = "";
 
+  // Nejdřív nahrajeme nové fotky. Co se nahraje, rovnou převedeme na { url },
+  // takže po chybě sítě a dalším „Uložit“ se nic nenahrává dvakrát.
+  const pending = editPhotos.filter((ph) => ph.file);
+  let uploaded = 0;
+  for (const ph of pending) {
+    setEditBusy(true, `Nahrávám fotku ${uploaded + 1} z ${pending.length}…`);
+    try {
+      const url = await window.uploadImageToCloudinary(ph.file, editPhotos.indexOf(ph) + 1);
+      URL.revokeObjectURL(ph.preview);
+      delete ph.file;
+      delete ph.preview;
+      ph.url = url;
+      uploaded++;
+    } catch (e) {
+      setEditBusy(false);
+      renderEditPhotos();
+      showEditError("Nahrání fotky selhalo: " + (e.message || e) + " Zkus Uložit znovu.");
+      return;
+    }
+  }
+  if (pending.length) renderEditPhotos();
+  setEditBusy(true, pending.length ? "Ukládám…" : "");
+
   const price = parseInt(priceRaw, 10);
   const categoryNum = categoryId ? parseInt(categoryId, 10) : null;
   const shippingNum = shippingId ? parseInt(shippingId, 10) : null;
-  const images = editPhotos.join(" ");
+  const imageUrls = editPhotos.map((ph) => ph.url);
+  const images = imageUrls.join(" ");
   const extId = p.product_id ? `${location} | ${p.product_id}` : p.ext_id || null;
 
   const patch = {
@@ -557,7 +687,7 @@ async function saveEdit() {
     category_id: categoryNum,
     shipping_template_id: shippingNum,
     images,
-    image_list: editPhotos.slice(),
+    image_list: imageUrls,
     priority_listing: editPromoPriority.checked,
     bold_title: editPromoBold.checked,
     highlight: editPromoHighlight.checked,
@@ -600,21 +730,33 @@ async function saveEdit() {
   }
   patch.raw = Object.assign({}, p.raw || {}, rawPatch);
 
-  editSaveBtn.classList.add("is-loading");
   try {
     await window.db.collection("products").doc(p._docId).update(patch);
   } catch (e) {
-    editSaveBtn.classList.remove("is-loading");
-    editErrorElem.textContent = "Uložení selhalo: " + (e.message || e);
+    setEditBusy(false);
+    showEditError("Uložení selhalo: " + (e.message || e));
     return;
   }
-  editSaveBtn.classList.remove("is-loading");
+  setEditBusy(false);
 
   Object.assign(p, patch);
   closeEdit();
   updateStats();
   render();
-  showStatus(`Produkt ${p.product_id || ""} upraven.`, "success", 3000);
+  showStatus(
+    `Produkt ${p.product_id || ""} upraven` +
+      (uploaded ? ` · nahráno ${window.pluralCz(uploaded, "nová fotka", "nové fotky", "nových fotek")}.` : "."),
+    "success",
+    3500
+  );
+}
+
+// Chyba v modálu úprav: text nad lištou tlačítek + skok na problémové pole.
+function showEditError(message, field) {
+  editErrorElem.textContent = message;
+  const target = field || editErrorElem;
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  if (field) field.focus({ preventScroll: true });
 }
 
 /* --- Smazání produktu z databáze --- */
@@ -699,11 +841,15 @@ function writeExcel(items, fileSuffix) {
 function exportExcel() {
   const items = allProducts.filter((p) => !p.sold);
   if (!items.length) {
-    showStatus("Žádné neprodané produkty k exportu.", "warning");
+    showStatus("Žádné neprodané produkty k exportu.", "warning", 4000);
     return;
   }
   if (writeExcel(items, "export")) {
-    showStatus(`Vyexportováno ${items.length} produktů (prodané vynechány).`, "success");
+    showStatus(
+      `Vyexportováno ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} (prodané vynechány).`,
+      "success",
+      4000
+    );
   }
 }
 
@@ -712,18 +858,22 @@ function exportExcel() {
 function exportSelected() {
   const items = allProducts.filter((p) => selectedIds.has(p._docId));
   if (!items.length) {
-    showStatus("Nejdřív označ produkty, které chceš exportovat.", "warning");
+    showStatus("Nejdřív označ produkty, které chceš exportovat.", "warning", 4000);
     return;
   }
   if (writeExcel(items, "vyber")) {
-    showStatus(`Vyexportováno ${items.length} vybraných produktů.`, "success");
+    showStatus(
+      `Vyexportováno: ${window.pluralCz(items.length, "vybraný produkt", "vybrané produkty", "vybraných produktů")}.`,
+      "success",
+      4000
+    );
   }
 }
 
 /* --- Náhled fotek --- */
 function openPhotos(imgs) {
   photoModalBody.innerHTML = imgs
-    .map((u) => `<img src="${escapeHtml(u)}" alt="foto produktu" />`)
+    .map((u, i) => thumbImg(u, 1200, `fotka ${i + 1}`, 'decoding="async"'))
     .join("");
   photoModal.classList.add("is-active");
 }
@@ -739,6 +889,7 @@ exportBtn.addEventListener("click", exportExcel);
 exportSelectedBtn.addEventListener("click", exportSelected);
 selectAllBtn.addEventListener("click", toggleSelectAllVisible);
 selectionClearBtn.addEventListener("click", clearSelection);
+statusMsg.addEventListener("click", hideStatus);
 photoModal
   .querySelectorAll(".modal-background, .modal-close")
   .forEach((el) => el.addEventListener("click", closePhotos));
@@ -759,10 +910,21 @@ editPhotoAddBtn.addEventListener("click", () => {
     editErrorElem.textContent = "Odkaz na fotku musí začínat http(s)://";
     return;
   }
+  if (editPhotos.length >= window.MAX_PHOTOS) {
+    editErrorElem.textContent = `Na produkt jde nejvýš ${window.MAX_PHOTOS} fotek.`;
+    return;
+  }
   editErrorElem.textContent = "";
-  editPhotos.push(url);
+  editPhotos.push({ url });
   editPhotoUrlInput.value = "";
   renderEditPhotos();
+});
+[editPhotoCamera, editPhotoGallery].forEach((input) => {
+  input.addEventListener("change", async () => {
+    const picked = Array.from(input.files || []);
+    input.value = ""; // ať jde stejnou fotku vybrat znovu
+    await addEditPhotoFiles(picked);
+  });
 });
 editSaveBtn.addEventListener("click", saveEdit);
 editCancelBtn.addEventListener("click", closeEdit);
@@ -778,10 +940,11 @@ editDeleteYesBtn.addEventListener("click", deleteProduct);
 editModal.querySelector(".modal-background").addEventListener("click", closeEdit);
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closePhotos();
-    closeEdit();
-  }
+  if (e.key !== "Escape") return;
+  // Ořez fotky má vlastní tlačítka; Escape by pod ním zavřel celou úpravu.
+  if (document.querySelector("#crop-modal.is-active")) return;
+  closePhotos();
+  closeEdit();
 });
 
 /* --- Start (až po přihlášení vlastníka) --- */

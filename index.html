@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>iAUKRO</title>
 
   <!-- Písmo -->
@@ -15,6 +15,7 @@
 
   <!-- Ikony + přepínač světlý/tmavý režim (nastaví motiv co nejdřív) -->
   <script src="icons.js"></script>
+  <script src="ui.js"></script>
   <script src="theme.js"></script>
 
   <!-- Knihovna XLSX -->
@@ -29,9 +30,10 @@
       <a class="brand" href="index.html">
         <i data-icon="camera"></i> iAUKRO
       </a>
-      <div class="topbar-actions">
-        <a href="dashboard.html" class="btn btn--ghost btn--sm">
-          <i data-icon="grid"></i> Dashboard
+      <!-- Odhlásit a přepínač motivu sem doplní auth-gate.js a theme.js -->
+      <div class="topbar-actions" data-topbar-actions>
+        <a href="dashboard.html" class="btn btn--ghost btn--sm topbar-btn" title="Dashboard" aria-label="Dashboard">
+          <i data-icon="grid"></i><span class="btn-label">Dashboard</span>
         </a>
       </div>
     </header>
@@ -322,30 +324,11 @@
     <div class="modal-background"></div>
     <div class="modal-content">
       <div class="box">
-        <p class="modal-title">Opravdu?</p>
-        <p class="modal-text">Tuhle akci nejde vzít zpět.</p>
+        <p class="modal-title" id="confirm-title">Opravdu?</p>
+        <p class="modal-text" id="confirm-text"></p>
         <div class="modal-actions">
           <button id="confirm-no" class="btn btn--ghost">Ne</button>
           <button id="confirm-yes" class="btn">Ano</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modál pro opuštění stránky -->
-  <div id="exit-modal" class="modal">
-    <div class="modal-background"></div>
-    <div class="modal-content">
-      <div class="box">
-        <p class="modal-title">Vymazal jsi data, když jsi skončil?</p>
-        <p class="modal-text">Pokud ne, můžeš to udělat teď.</p>
-        <div class="stack">
-          <button id="delete-data-btn" class="btn btn--block">
-            <i data-icon="trash"></i> Vymazat data
-          </button>
-          <button id="close-modal-btn" class="btn btn--ghost btn--block">
-            Pokračovat bez mazání
-          </button>
         </div>
       </div>
     </div>
@@ -374,6 +357,7 @@
   <!-- Vlastní JS -->
   <script src="categories.js"></script>
   <script src="description.js"></script>
+  <script src="photos.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -135,10 +135,25 @@ půjdou přesně označené produkty (i prodané, pokud si je vybereš).
 **Vybrat vše** označí to, co je právě vidět po hledání a filtru.
 Tlačítko **Export všech neprodaných** funguje jako dřív.
 
+### 📸 Přidání fotek k uloženému produktu
+Nové fotky se v modálu **Upravit** nejdřív jen ořežou a označí štítkem
+**nová**. Na Cloudinary se nahrají až po kliknutí na **Uložit** – zrušená
+úprava tak na Cloudinary nic nenechá. Když nahrávání selže (síť), modál
+zůstane otevřený a další **Uložit** nahraje jen to, co ještě chybí.
+
 ## 🎨 Vzhled
 Appka i dashboard mají vlastní černobílý design bez CSS frameworku
 (`styles.css` + `dashboard.css`) a čárové SVG ikony z **`icons.js`** –
-nic z toho nepotřebuje CDN. Světlý/tmavý režim přepíná tlačítko vpravo nahoře.
+nic z toho nepotřebuje CDN. Světlý/tmavý režim přepíná tlačítko vpravo nahoře
+(bez uložené volby se řídí nastavením telefonu).
+
+Sdílené soubory: `photos.js` (ořez, nahrání na Cloudinary, zmenšené náhledy),
+`ui.js` (zámek scrollu pod modálem, skloňování, místní datum),
+`description.js` (šablona popisu), `categories.js`, `icons.js`.
+
+Dashboard nestahuje plné fotky (1600 px): karty berou z Cloudinary náhled
+480 px a načítají se až při doscrollování. Kdyby Cloudinary transformace
+odmítl, obrázek se sám přepne na originál.
 
 ## ✏️ Úprava produktů v databázi
 V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
@@ -153,7 +168,7 @@ V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou zm�
 | Kategorie | výběr s hledáním z `MapaKat.txt` |
 | Doprava | stejný seznam jako v appce; neznámé ID u starších produktů se doplní |
 | Propagace | přednostní výpis, tučný titulek, zvýraznění |
-| Fotky | odebrání, přehození pořadí (⭐ = hlavní fotka) a přidání přes odkaz |
+| Fotky | přidání (vyfotit / z galerie, s ořezem jako v appce), odebrání, přehození pořadí (⭐ = hlavní fotka), případně vložení odkazem |
 
 **ID produktu měnit nejde** – je to klíč dokumentu v databázi (a pojistka proti
 dvojímu použití ID).
