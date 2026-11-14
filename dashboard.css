@@ -9,12 +9,50 @@
   max-width: 1240px;
   margin: 0 auto;
   padding: 20px 24px 120px;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+
+/* Stavová hláška plave nahoře, ať je vidět i hluboko v seznamu.
+   Klepnutím se zavře. */
+.dash-toast {
+  position: fixed;
+  left: 50%;
+  top: max(14px, env(safe-area-inset-top));
+  z-index: 260; /* nad modály, ať je vidět i výsledek akce z modálu */
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  margin: 0;
+  transform: translateX(-50%);
+  box-shadow: var(--shadow);
+  background: var(--bg);
+  cursor: pointer;
+}
+.dash-toast.is-fresh {
+  animation: toast-in 0.4s var(--ease);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .brand-sub {
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--muted);
+}
+/* Nejužší telefony: „Dashboard“ u loga se už nevejde vedle tlačítek. */
+@media (max-width: 359px) {
+  .brand-sub {
+    display: none;
+  }
 }
 
 /* Akce pod hlavičkou */
@@ -186,6 +224,14 @@
   justify-content: center;
   color: var(--faint);
 }
+.prod-thumb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .prod-thumb > .icon {
   width: 32px;
   height: 32px;
@@ -241,11 +287,13 @@
 }
 
 /* Zaškrtávátko výběru k exportu */
+/* Viditelný čtvereček má 26 px, ale klikací plocha 44 px (prst). */
 .prod-select {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 0;
+  left: 0;
   z-index: 3;
+  padding: 9px;
   cursor: pointer;
 }
 .prod-select input {
@@ -374,6 +422,7 @@
   align-items: center;
   gap: 10px;
   max-width: calc(100vw - 24px);
+  margin-bottom: env(safe-area-inset-bottom);
   padding: 8px 8px 8px 18px;
   border-radius: var(--radius-pill);
   background: var(--inverse-bg);
@@ -449,14 +498,64 @@
 .edit-error:empty {
   display: none;
 }
+/* Lišta akcí je přilepená ke spodku modálu – Uložit je vždy po ruce,
+   i když je formulář na mobilu dlouhý. */
 .edit-modal-buttons {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
-  padding-top: 16px;
+  margin: 0 -24px -24px;
+  padding: 14px 24px 18px;
   border-top: 1px solid var(--line);
+  border-radius: 0 0 18px 18px;
+  background: var(--bg);
+}
+.edit-progress {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+/* Během ukládání se formulář nedá měnit. */
+#edit-modal.is-busy .box > .field,
+#edit-modal.is-busy .field-row,
+#edit-modal.is-busy .edit-delete-confirm {
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.add-url-toggle {
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+.add-url-toggle summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+.add-url-toggle summary::-webkit-details-marker {
+  display: none;
+}
+.add-url-toggle summary::before {
+  content: "+";
+  font-weight: 700;
+}
+.add-url-toggle[open] summary::before {
+  content: "–";
+}
+.add-url-toggle summary:hover {
+  color: var(--fg);
 }
 .edit-modal-buttons-right {
   display: flex;
@@ -511,6 +610,11 @@
   object-fit: cover;
   display: block;
 }
+/* Nová fotka – ještě není na Cloudinary, nahraje se při uložení. */
+.edit-photo-item.is-pending {
+  outline: 1.5px dashed var(--fg);
+  outline-offset: -1.5px;
+}
 .edit-photo-main {
   position: absolute;
   left: 0;
@@ -560,6 +664,11 @@
 }
 
 /* Responzivita */
+/* Po načtení karty najíždějí; při hledání a filtrování už ne (blikalo by to). */
+.dash-grid.no-anim .prod-card {
+  animation: none;
+}
+
 @media (max-width: 760px) {
   .shell {
     padding-left: 16px;
@@ -595,6 +704,33 @@
   }
   .selection-export-more {
     display: none;
+  }
+}
+@media (max-width: 400px) {
+  /* Na úzkém displeji zůstane u „zrušit“ jen křížek. */
+  .selection-clear-label {
+    display: none;
+  }
+  .selection-clear {
+    width: 36px;
+    padding: 0;
+  }
+}
+@media (max-width: 480px) {
+  /* Lišta akcí v úpravě zůstane v jedné řadě: u Smazat jen koš. */
+  #edit-delete-btn .btn-label {
+    display: none;
+  }
+  #edit-delete-btn {
+    width: 46px;
+    padding: 0;
+  }
+  .edit-modal-buttons {
+    flex-wrap: nowrap;
+  }
+  /* …kromě chvíle, kdy se nad tlačítky ukazuje průběh nahrávání */
+  .edit-modal-buttons:has(.edit-progress:not(.is-hidden)) {
+    flex-wrap: wrap;
   }
 }
 @media (max-width: 420px) {

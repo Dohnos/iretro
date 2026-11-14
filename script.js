@@ -1,8 +1,9 @@
 /* ---------------------------------
    Základní konfigurace
 -----------------------------------*/
-const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/drrzl7evt/auto/upload";
-const CLOUDINARY_UPLOAD_PRESET = "Retroaukce";
+// Cloudinary (adresa, preset) je v photos.js – sdílí ho appka i dashboard.
+const CLOUDINARY_UPLOAD_URL = window.CLOUDINARY_UPLOAD_URL;
+const CLOUDINARY_UPLOAD_PRESET = window.CLOUDINARY_UPLOAD_PRESET;
 
 // Výchozí doprava (ZS or BA). Po každém produktu se výběr vrací sem.
 const DEFAULT_SHIPPING_ID = "2438895";
@@ -34,7 +35,7 @@ let retroDateStr = ""; // YYYY-MM-DD; prázdné = doplní se z data fotky
 // Fotky: při focení jsou povinné 3, ve zpětném režimu stačí 1.
 // Nad povinný počet jde přidat další, až do MAX_PHOTOS.
 const BASE_PHOTOS = 3;
-const MAX_PHOTOS = 12;
+const MAX_PHOTOS = window.MAX_PHOTOS;
 function minPhotosRequired() {
   return isRetroMode() ? 1 : BASE_PHOTOS;
 }
@@ -92,9 +93,6 @@ const confirmNoBtn = document.getElementById("confirm-no");
 const finishBtn = document.getElementById("finish-btn");
 const resetBtn = document.getElementById("reset-btn");
 
-const exitModal = document.getElementById("exit-modal");
-const deleteDataBtn = document.getElementById("delete-data-btn");
-const closeModalBtn = document.getElementById("close-modal-btn");
 
 const shippingMethodSelect = document.getElementById("shippingMethod");
 
@@ -138,309 +136,6 @@ function updateStatus(message, type = "info") {
 
   updateDailyCountDisplay();
 }
-
-function ensurePortrait(file) {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith("image/")) {
-      resolve(file);
-      return;
-    }
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (e) => {
-      const img = new Image();
-      img.src = e.target.result;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        
-        canvas.width = 1600;
-        canvas.height = 1600;
-        
-        // Zjistíme menší z rozměrů pro čtvercový ořez
-        const size = Math.min(img.width, img.height);
-        
-        // Vypočteme souřadnice pro středový ořez
-        const sourceX = (img.width - size) / 2;
-        const sourceY = (img.height - size) / 2;
-        
-        // Vykreslíme výřez na cílovou velikost 1600x1600 px
-        ctx.drawImage(img, sourceX, sourceY, size, size, 0, 0, 1600, 1600);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const croppedFile = new File([blob], file.name, {
-                type: "image/jpeg",
-                lastModified: Date.now()
-              });
-              resolve(croppedFile);
-            } else {
-              resolve(file);
-            }
-          },
-          "image/jpeg",
-          0.98
-        );
-      };
-      img.onerror = () => resolve(file);
-    };
-    reader.onerror = () => resolve(file);
-  });
-}
-
-/* ---------------------------------
-   Interaktivní náhled a úprava ořezu
-   (čtverec 1:1, přesně jak to uloží
-   Cloudinary po nahrání)
------------------------------------*/
-function buildCropModal() {
-  const existing = document.getElementById("crop-modal");
-  if (existing) return existing;
-
-  // Styly ořezu jsou ve styles.css (sekce „Ořez fotky“).
-  const container = document.createElement("div");
-  container.innerHTML = `
-    <div class="modal" id="crop-modal">
-      <div class="modal-background"></div>
-      <div class="modal-content">
-        <div class="box">
-          <p class="modal-title">Ořez fotky</p>
-          <p class="muted" id="crop-modal-subtitle"></p>
-          <div id="crop-viewport">
-            <img id="crop-image" draggable="false" alt="Náhled ořezu fotky" />
-          </div>
-          <div class="crop-controls">
-            ${window.icon("search")}
-            <input type="range" id="crop-zoom-slider" min="1" max="4" step="0.01" value="1"
-                   aria-label="Přiblížení">
-          </div>
-          <p class="crop-hint">Táhni pro posun, sliderem nebo dvěma prsty přibliž.</p>
-          <div class="crop-buttons">
-            <button type="button" class="btn btn--quiet btn--sm" id="crop-reset-btn">
-              ${window.icon("undo")} Reset
-            </button>
-            <button type="button" class="btn btn--ghost btn--sm" id="crop-cancel-btn">
-              ${window.icon("x")} Zrušit
-            </button>
-            <button type="button" class="btn btn--sm" id="crop-confirm-btn">
-              ${window.icon("check")} Použít
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(container.firstElementChild);
-  return document.getElementById("crop-modal");
-}
-
-// Zobrazí interaktivní ořez pro jeden soubor.
-// Vrací Promise<File|null> - null pokud uživatel fotku zruší.
-function cropImageInteractive(file, label) {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith("image/")) {
-      resolve(file);
-      return;
-    }
-
-    const modal = buildCropModal();
-    const viewport = document.getElementById("crop-viewport");
-    const imgEl = document.getElementById("crop-image");
-    const zoomSlider = document.getElementById("crop-zoom-slider");
-    const subtitleElem = document.getElementById("crop-modal-subtitle");
-    const confirmBtn = document.getElementById("crop-confirm-btn");
-    const cancelBtn = document.getElementById("crop-cancel-btn");
-    const resetBtn = document.getElementById("crop-reset-btn");
-
-    subtitleElem.textContent = label || "";
-    zoomSlider.value = 1;
-    openModal(modal);
-
-    let state = null;
-    let mode = null; // "pan" | "pinch"
-    const pointers = new Map();
-    let lastX = 0, lastY = 0;
-    let pinchStartDist = 1, pinchStartZoom = 1;
-
-    function displayedSize() {
-      return {
-        w: state.natW * state.baseScale * state.zoom,
-        h: state.natH * state.baseScale * state.zoom
-      };
-    }
-    function clampOffsets() {
-      const { w, h } = displayedSize();
-      state.offX = Math.min(0, Math.max(state.vpSize - w, state.offX));
-      state.offY = Math.min(0, Math.max(state.vpSize - h, state.offY));
-    }
-    function render() {
-      const { w, h } = displayedSize();
-      imgEl.style.width = w + "px";
-      imgEl.style.height = h + "px";
-      imgEl.style.transform = `translate(${state.offX}px, ${state.offY}px)`;
-    }
-    function resetCrop() {
-      state.zoom = 1;
-      const { w, h } = displayedSize();
-      state.offX = (state.vpSize - w) / 2;
-      state.offY = (state.vpSize - h) / 2;
-      zoomSlider.value = 1;
-      render();
-    }
-
-    function handlePointerDown(ev) {
-      viewport.setPointerCapture?.(ev.pointerId);
-      pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-      if (pointers.size === 1) {
-        mode = "pan";
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-      } else if (pointers.size === 2) {
-        mode = "pinch";
-        const [a, b] = Array.from(pointers.values());
-        pinchStartDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-        pinchStartZoom = state.zoom;
-      }
-    }
-    function handlePointerMove(ev) {
-      if (!pointers.has(ev.pointerId)) return;
-      pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-      if (mode === "pan" && pointers.size === 1) {
-        const dx = ev.clientX - lastX;
-        const dy = ev.clientY - lastY;
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-        state.offX += dx;
-        state.offY += dy;
-        clampOffsets();
-        render();
-      } else if (mode === "pinch" && pointers.size === 2) {
-        const [a, b] = Array.from(pointers.values());
-        const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-        let newZoom = pinchStartZoom * (dist / pinchStartDist);
-        newZoom = Math.min(4, Math.max(1, newZoom));
-        state.zoom = newZoom;
-        zoomSlider.value = newZoom.toFixed(2);
-        clampOffsets();
-        render();
-      }
-    }
-    function handlePointerUp(ev) {
-      pointers.delete(ev.pointerId);
-      if (pointers.size === 1) {
-        mode = "pan";
-        const [p] = Array.from(pointers.values());
-        lastX = p.x;
-        lastY = p.y;
-      } else if (pointers.size === 0) {
-        mode = null;
-      }
-    }
-    function handleWheel(ev) {
-      ev.preventDefault();
-      let newZoom = state.zoom - ev.deltaY * 0.0015;
-      newZoom = Math.min(4, Math.max(1, newZoom));
-      state.zoom = newZoom;
-      zoomSlider.value = newZoom.toFixed(2);
-      clampOffsets();
-      render();
-    }
-    function handleSliderInput() {
-      state.zoom = parseFloat(zoomSlider.value);
-      clampOffsets();
-      render();
-    }
-
-    function attachListeners() {
-      viewport.addEventListener("pointerdown", handlePointerDown);
-      viewport.addEventListener("pointermove", handlePointerMove);
-      viewport.addEventListener("pointerup", handlePointerUp);
-      viewport.addEventListener("pointercancel", handlePointerUp);
-      viewport.addEventListener("pointerleave", handlePointerUp);
-      viewport.addEventListener("wheel", handleWheel, { passive: false });
-      zoomSlider.addEventListener("input", handleSliderInput);
-      resetBtn.addEventListener("click", resetCrop);
-    }
-    function detachListeners() {
-      viewport.removeEventListener("pointerdown", handlePointerDown);
-      viewport.removeEventListener("pointermove", handlePointerMove);
-      viewport.removeEventListener("pointerup", handlePointerUp);
-      viewport.removeEventListener("pointercancel", handlePointerUp);
-      viewport.removeEventListener("pointerleave", handlePointerUp);
-      viewport.removeEventListener("wheel", handleWheel);
-      zoomSlider.removeEventListener("input", handleSliderInput);
-      resetBtn.removeEventListener("click", resetCrop);
-      confirmBtn.onclick = null;
-      cancelBtn.onclick = null;
-    }
-    function finish(result) {
-      detachListeners();
-      closeModal(modal);
-      resolve(result);
-    }
-
-    confirmBtn.onclick = () => {
-      const scaleFactor = state.baseScale * state.zoom;
-      const sx = -state.offX / scaleFactor;
-      const sy = -state.offY / scaleFactor;
-      const sSize = state.vpSize / scaleFactor;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 1600;
-      canvas.height = 1600;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(imgEl, sx, sy, sSize, sSize, 0, 0, 1600, 1600);
-
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            const croppedFile = new File([blob], file.name, {
-              type: "image/jpeg",
-              lastModified: Date.now()
-            });
-            finish(croppedFile);
-          } else {
-            finish(file);
-          }
-        },
-        "image/jpeg",
-        0.98
-      );
-    };
-
-    cancelBtn.onclick = () => finish(null);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      imgEl.src = e.target.result;
-    };
-    reader.onerror = () => finish(file);
-    reader.readAsDataURL(file);
-
-    imgEl.onload = () => {
-      // clientWidth, ne getBoundingClientRect: modál se při otevření animuje
-      // (scale) a změřená šířka by byla o pár pixelů menší než skutečná.
-      const vpSize = viewport.clientWidth;
-      state = {
-        natW: imgEl.naturalWidth,
-        natH: imgEl.naturalHeight,
-        vpSize: vpSize,
-        baseScale: Math.max(
-          vpSize / imgEl.naturalWidth,
-          vpSize / imgEl.naturalHeight
-        ),
-        zoom: 1,
-        offX: 0,
-        offY: 0
-      };
-      resetCrop();
-      attachListeners();
-    };
-    imgEl.onerror = () => finish(file);
-  });
-}
-
 
 // Vrátí YYYY-MM-DD (lokální datum, ne UTC – jinak by se po půlnoci UTC
 // posouval den)
@@ -497,12 +192,11 @@ function updateDailyCountDisplay() {
       dailyCount++;
     }
   });
-  if (isRetroMode() && retroDateStr) {
-    dailyCountElem.textContent =
-      `(K datu ${formatDateCz(dateStr)} přidáno: ${dailyCount} produktů)`;
-  } else {
-    dailyCountElem.textContent = `(Dnes přidáno: ${dailyCount} produktů)`;
-  }
+  const countText = window.pluralCz(dailyCount, "produkt", "produkty", "produktů");
+  dailyCountElem.textContent =
+    isRetroMode() && retroDateStr
+      ? `K datu ${formatDateCz(dateStr)} přidáno: ${countText}`
+      : `Dnes přidáno: ${countText}`;
 }
 
 // Zobrazí dříve použitá umístění (štítky pod polem)
@@ -922,6 +616,16 @@ categoryBtn.addEventListener("click", () => {
   openModal(categoryModal);
   categorySearch.value = "";
   updateCategoryList("");
+  categorySearch.focus();
+});
+// Kategorie se zavře i klepnutím vedle nebo klávesou Escape.
+categoryModal.querySelector(".modal-background").addEventListener("click", () => {
+  closeModal(categoryModal);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && categoryModal.classList.contains("is-active")) {
+    closeModal(categoryModal);
+  }
 });
 
 categorySearch.addEventListener("input", () => {
@@ -972,52 +676,6 @@ categoryCloseBtn.addEventListener("click", () => {
 });
 
 /* ---------------------------------
-   Nahrávání: Unikátní názvy fotek + Excel
------------------------------------*/
-async function uploadFile(file, indexForImages = 1) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-  // Datum & čas
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const year = String(now.getFullYear());
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const dateStr = day + month + year; // "26032025"
-  const timeStr = hours + minutes;    // "1042"
-
-  // Náhodný sufix (4 znaky)
-  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-
-  if (file.type.includes("image")) {
-    formData.append("folder", "media_library");
-    // Např.: IMAGE_25032025_1042_1_ABCD
-    const publicId = `IMAGE_${dateStr}_${timeStr}_${indexForImages}_${randomSuffix}`;
-    formData.append("public_id", publicId);
-
-  } else {
-    formData.append("folder", "excel_files");
-    // Např.: products_25032025_RA_ABCD
-    const publicId = `products_${dateStr}_${productIdPrefix}_${randomSuffix}`;
-    formData.append("public_id", publicId);
-  }
-
-  const resp = await fetch(CLOUDINARY_UPLOAD_URL, {
-    method: "POST",
-    body: formData
-  });
-  if (!resp.ok) {
-    const errorText = await resp.text();
-    throw new Error(`Chyba při nahrávání: ${resp.status} - ${errorText}`);
-  }
-  const data = await resp.json();
-  return data.secure_url;
-}
-
-/* ---------------------------------
    Přidání produktu
 -----------------------------------*/
 async function addProduct() {
@@ -1052,6 +710,10 @@ async function addProduct() {
   }
   if (!valid) {
     updateStatus('Vyplň všechna povinná pole!', "warning");
+    // Tlačítko je na konci dlouhého formuláře – skočíme na první chybu.
+    const firstError = productDetailsSection.querySelector('.input-error, .error-message:not(:empty)');
+    const target = firstError && firstError.closest('.field');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
   if (photos.length < minPhotosRequired()) {
@@ -1074,7 +736,7 @@ async function addProduct() {
     const photoUrls = [];
     for (let i = 0; i < photos.length; i++) {
       updateStatus(`Nahrávám obrázek ${i + 1}/${photos.length}...`, "progress");
-      const url = await uploadFile(photos[i], i + 1);
+      const url = await window.uploadImageToCloudinary(photos[i], i + 1);
       photoUrls.push(url);
       const percent = Math.round(((i + 1) / photos.length) * 100);
       progressBar.value = percent;
@@ -1217,18 +879,25 @@ function addAnotherProduct() {
    Dokončení – export do Excelu, WhatsApp
 -----------------------------------*/
 async function finish() {
-  const confirmed = await showConfirmModal();
-  if (!confirmed) return;
-
   const products = JSON.parse(localStorage.getItem("products")) || [];
   const savedProductsDiv = document.getElementById("saved-products");
   savedProductsDiv.innerHTML = "";
 
+  // Bez produktů není co potvrzovat.
   if (products.length === 0) {
     savedProductsDiv.innerHTML = "<p>Zatím nebyl přidán žádný produkt.</p>";
     updateStatus("Přidej aspoň jeden produkt před dokončením.", "warning");
     return;
   }
+
+  const confirmed = await showConfirmModal({
+    title: "Odeslat přes WhatsApp?",
+    text:
+      `Z ${window.pluralCz(products.length, "přidaného produktu", "přidaných produktů", "přidaných produktů")} ` +
+      "se vytvoří Excel, nahraje se a produkty se uloží do databáze.",
+    confirmLabel: "Odeslat"
+  });
+  if (!confirmed) return;
 
   const headers = [
     "entityId",
@@ -1498,10 +1167,23 @@ async function saveToDatabase() {
    Reset úložiště
 -----------------------------------*/
 async function resetStorage() {
-  const confirmed = await showConfirmModal();
+  const products = JSON.parse(localStorage.getItem("products")) || [];
+  const unsynced = products.filter((p) => !p.syncedToDb).length;
+  const confirmed = await showConfirmModal({
+    title: "Smazat rozpracovaná data?",
+    text:
+      "Vymaže se seznam přidaných produktů v tomhle zařízení. Co už je v databázi, zůstane." +
+      (unsynced
+        ? ` Pozor: ${window.pluralCz(unsynced, "produkt ještě není", "produkty ještě nejsou", "produktů ještě není")} v databázi a ztratí se.`
+        : ""),
+    confirmLabel: "Smazat"
+  });
   if (!confirmed) return;
 
+  // Volbu světlého/tmavého režimu mazání dat nemá rušit.
+  const theme = localStorage.getItem("theme");
   localStorage.clear();
+  if (theme) localStorage.setItem("theme", theme);
   // Zvolený režim (vč. zpětného data) si necháme – mazání dat neznamená,
   // že uživatel přestal zadávat zpětně.
   saveEntryModeState();
@@ -1594,40 +1276,48 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 });
 
 /* ---------------------------------
-   Potvrzovací modál ANO/NE
+   Potvrzovací modál
+   Vždy říká, co se přesně stane, a tlačítko
+   nese název akce (ne jen „Ano“).
 -----------------------------------*/
-function showConfirmModal() {
+const confirmTitleElem = document.getElementById("confirm-title");
+const confirmTextElem = document.getElementById("confirm-text");
+
+function showConfirmModal({ title = "Opravdu?", text = "", confirmLabel = "Ano" } = {}) {
+  confirmTitleElem.textContent = title;
+  confirmTextElem.textContent = text;
+  confirmTextElem.classList.toggle("is-hidden", !text);
+  confirmYesBtn.textContent = confirmLabel;
   openModal(confirmModal);
   return new Promise((resolve) => {
-    confirmYesBtn.onclick = () => {
+    const done = (result) => {
       closeModal(confirmModal);
-      resolve(true);
+      confirmYesBtn.onclick = confirmNoBtn.onclick = confirmBackdrop.onclick = null;
+      resolve(result);
     };
-    confirmNoBtn.onclick = () => {
-      closeModal(confirmModal);
-      resolve(false);
-    };
+    confirmYesBtn.onclick = () => done(true);
+    confirmNoBtn.onclick = () => done(false);
+    confirmBackdrop.onclick = () => done(false);
   });
 }
+const confirmBackdrop = confirmModal.querySelector(".modal-background");
 
 /* ---------------------------------
-   Modál pro odchod
+   Odchod ze stránky
+   Prohlížeč se zeptá jen tehdy, když by se
+   něco ztratilo: rozdělané fotky, nebo produkty,
+   které ještě nejsou v databázi. Odkaz na
+   dashboard jinak funguje bez otázek.
 -----------------------------------*/
+function hasUnsavedWork() {
+  if (photos.length > 0) return true;
+  const products = JSON.parse(localStorage.getItem("products")) || [];
+  return products.some((p) => !p.syncedToDb);
+}
 window.addEventListener("beforeunload", (e) => {
-  openModal(exitModal);
+  if (!hasUnsavedWork()) return;
   e.preventDefault();
   e.returnValue = "";
-});
-
-deleteDataBtn.addEventListener("click", () => {
-  resetStorage();
-  closeModal(exitModal);
-  updateStatus("Data vymazána při odchodu!");
-  setTimeout(() => window.location.reload(), 1000);
-});
-
-closeModalBtn.addEventListener("click", () => {
-  closeModal(exitModal);
 });
 
 /* ---------------------------------
