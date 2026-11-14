@@ -2,7 +2,7 @@
    iAUKRO Dashboard – přehled produktů
    Čte data z Firestore (kolekce "products"),
    umožňuje produkty upravit, smazat, označit
-   "prodáno" a vyexportovat Excel ve stejném
+   "prodáno" a vyexportovat CSV ve stejném
    formátu jako appka – buď všechny neprodané,
    nebo jen ručně vybrané.
 -----------------------------------*/
@@ -30,16 +30,6 @@ const selectionBar = document.getElementById("selection-bar");
 const selectionCountElem = document.getElementById("selection-count");
 const selectionClearBtn = document.getElementById("selection-clear-btn");
 const exportSelectedBtn = document.getElementById("export-selected-btn");
-
-/* Hlavičky Excelu – MUSÍ sedět s appkou (formát pro Aukro/Cloudinary) */
-const EXPORT_HEADERS = [
-  "entityId", "name", "language", "extId", "categoryId", "description",
-  "auctionPriceAmount", "auctionPriceCurrency", "buyNowPriceAmount",
-  "buyNowPriceCurrency", "quantity", "quantityUnit", "startingAt", "duration",
-  "reexposeType", "location", "shippingTemplateId", "shippingPayer", "images",
-  "bestOffer", "onlyVerifiedBuyersEnabledOverride", "attributes",
-  "priorityListing", "boldTitle", "highlight"
-];
 
 /* --- Pomocné --- */
 // Typ určuje ikonu a důraz: info | success | warning | error | progress
@@ -365,7 +355,7 @@ async function toggleSold(p, btn) {
 /* ==========================================================
    Úprava produktu
    Uloží se jak "ploché" sloupce (pro dashboard), tak odpovídající
-   pole v "raw" – z toho se skládá Excel pro Aukro, ať se obojí
+   pole v "raw" – z toho se skládá export pro Aukro, ať se obojí
    nerozejde.
    ==========================================================*/
 let editingProduct = null;   // produkt otevřený v modálu
@@ -784,13 +774,13 @@ async function deleteProduct() {
   showStatus(`Produkt ${label} byl smazán z databáze.`, "warning", 4000);
 }
 
-/* --- Export Excelu ---
+/* --- Export CSV ---
    Řádek pro Aukro se skládá z plochých sloupců, chybějící hodnoty
-   doplní "raw" (původní podoba produktu z appky). */
-function toExportRow(p, i) {
+   doplní "raw" (původní podoba produktu z appky). entityId doplní
+   buildExportCsv (export.js) – v každém souboru 1…N. */
+function toExportRow(p) {
   const r = p.raw || {};
   return {
-    entityId: r.entityId != null ? r.entityId : i + 1,
     name: p.name != null ? p.name : r.name,
     language: r.language || "cs-CZ",
     extId: p.ext_id != null ? p.ext_id : r.extId,
@@ -819,55 +809,48 @@ function toExportRow(p, i) {
   };
 }
 
-// Zapíše dané produkty do .xlsx; vrátí false, když není co nebo čím zapsat.
-function writeExcel(items, fileSuffix) {
-  if (typeof XLSX === "undefined") {
-    showStatus("Knihovna XLSX se nenačetla.", "error");
-    return false;
-  }
-  const ws = XLSX.utils.json_to_sheet(items.map(toExportRow), { header: EXPORT_HEADERS });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Products");
+// Číslo z ID produktu (RA07 → 7); produkty bez ID jdou na konec.
+function idNumber(p) {
+  const m = /^([A-Za-z]+)(\d+)$/.exec(p.product_id || "");
+  return m ? parseInt(m[2], 10) : Infinity;
+}
 
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = String(d.getFullYear());
-  XLSX.writeFile(wb, `products_${dd}${mm}${yyyy}_${fileSuffix}.xlsx`);
-  return true;
+// Stáhne dané produkty jako CSV pro Aukro. Řadí se od nejstaršího ID,
+// takže entityId 1 dostane první produkt (např. RA01) a poslední N.
+function writeCsv(items, fileSuffix) {
+  const sorted = items.slice().sort((a, b) => idNumber(a) - idNumber(b));
+  window.downloadExportCsv(window.buildExportCsv(sorted.map(toExportRow)), window.exportFileName(fileSuffix));
 }
 
 // Všechny neprodané produkty.
-function exportExcel() {
+function exportAll() {
   const items = allProducts.filter((p) => !p.sold);
   if (!items.length) {
     showStatus("Žádné neprodané produkty k exportu.", "warning", 4000);
     return;
   }
-  if (writeExcel(items, "export")) {
-    showStatus(
-      `Vyexportováno ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} (prodané vynechány).`,
-      "success",
-      4000
-    );
-  }
+  writeCsv(items, "export");
+  showStatus(
+    `Vyexportováno ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} do CSV (prodané vynechány).`,
+    "success",
+    4000
+  );
 }
 
 // Jen ručně vybrané produkty – přesně ty, které jsou označené
-// (včetně prodaných, pokud si je uživatel vybral), v pořadí z dashboardu.
+// (včetně prodaných, pokud si je uživatel vybral).
 function exportSelected() {
   const items = allProducts.filter((p) => selectedIds.has(p._docId));
   if (!items.length) {
     showStatus("Nejdřív označ produkty, které chceš exportovat.", "warning", 4000);
     return;
   }
-  if (writeExcel(items, "vyber")) {
-    showStatus(
-      `Vyexportováno: ${window.pluralCz(items.length, "vybraný produkt", "vybrané produkty", "vybraných produktů")}.`,
-      "success",
-      4000
-    );
-  }
+  writeCsv(items, "vyber");
+  showStatus(
+    `Vyexportováno do CSV: ${window.pluralCz(items.length, "vybraný produkt", "vybrané produkty", "vybraných produktů")}.`,
+    "success",
+    4000
+  );
 }
 
 /* --- Náhled fotek --- */
@@ -885,7 +868,7 @@ function closePhotos() {
 searchInput.addEventListener("input", render);
 hideSoldInput.addEventListener("change", render);
 refreshBtn.addEventListener("click", loadProducts);
-exportBtn.addEventListener("click", exportExcel);
+exportBtn.addEventListener("click", exportAll);
 exportSelectedBtn.addEventListener("click", exportSelected);
 selectAllBtn.addEventListener("click", toggleSelectAllVisible);
 selectionClearBtn.addEventListener("click", clearSelection);

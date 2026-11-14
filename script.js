@@ -752,10 +752,7 @@ async function addProduct() {
       }
     }
 
-    // Generování entityId
-    let lastEntityId = parseInt(localStorage.getItem("lastEntityId")) || 0;
-    lastEntityId += 1;
-    localStorage.setItem("lastEntityId", lastEntityId);
+    // entityId se nedává tady: export ho čísluje v každém souboru 1…N (export.js).
 
     function getRoundedISODate() {
       let d = new Date();
@@ -774,7 +771,6 @@ async function addProduct() {
     const createdAtIso = getEffectiveCreatedAtISO();
 
     const product = {
-      entityId: lastEntityId,
       name: formattedName,
       language: "cs-CZ",
       extId: `${location} | ${productId}`,
@@ -876,7 +872,7 @@ function addAnotherProduct() {
 }
 
 /* ---------------------------------
-   Dokončení – export do Excelu, WhatsApp
+   Dokončení – export do CSV, WhatsApp
 -----------------------------------*/
 async function finish() {
   const products = JSON.parse(localStorage.getItem("products")) || [];
@@ -894,41 +890,13 @@ async function finish() {
     title: "Odeslat přes WhatsApp?",
     text:
       `Z ${window.pluralCz(products.length, "přidaného produktu", "přidaných produktů", "přidaných produktů")} ` +
-      "se vytvoří Excel, nahraje se a produkty se uloží do databáze.",
+      "se vytvoří CSV, nahraje se a produkty se uloží do databáze.",
     confirmLabel: "Odeslat"
   });
   if (!confirmed) return;
 
-  const headers = [
-    "entityId",
-    "name",
-    "language",
-    "extId",
-    "categoryId",
-    "description",
-    "auctionPriceAmount",
-    "auctionPriceCurrency",
-    "buyNowPriceAmount",
-    "buyNowPriceCurrency",
-    "quantity",
-    "quantityUnit",
-    "startingAt",
-    "duration",
-    "reexposeType",
-    "location",
-    "shippingTemplateId",
-    "shippingPayer",
-    "images",
-    "bestOffer",
-    "onlyVerifiedBuyersEnabledOverride",
-    "attributes",
-    "priorityListing",
-    "boldTitle",
-    "highlight"
-  ];
-
-  const data = products.map((p) => ({
-    entityId: p.entityId,
+  // Řádky v pořadí přidání → entityId 1 je první přidaný produkt (export.js).
+  const rows = products.map((p) => ({
     name: p.name,
     language: p.language,
     extId: p.extId,
@@ -955,41 +923,16 @@ async function finish() {
     highlight: p.highlight ?? false
   }));
 
-  const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
-
   try {
-    updateStatus("⏳ Nahrávám Excel na server...");
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: "xlsx",
-      type: "array"
-    });
-    const blob = new Blob([excelBuffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
+    updateStatus("Nahrávám CSV na server…", "progress");
+    const file = window.exportCsvFile(window.buildExportCsv(rows), window.exportFileName(productIdPrefix || "export"));
+    const exportUrl = await uploadExportFile(file);
 
-    // Vytvoříme jméno souboru: products_26032025_[Z].xlsx
-    const dateNow = new Date();
-    const dd = String(dateNow.getDate()).padStart(2, "0");
-    const mm = String(dateNow.getMonth() + 1).padStart(2, "0");
-    const yyyy = String(dateNow.getFullYear());
-    const dateStr = dd + mm + yyyy;
-    const fileName = `products_${dateStr}_${productIdPrefix}.xlsx`;
-
-    const file = new File([blob], fileName, {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
-
-    // Pro Excel: doplníme i unikátní sufix do public_id
-    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const excelUrl = await uploadFileForExcel(file, randomSuffix);
-
-    // Po vygenerování Excelu naimportujeme produkty i do dashboardu (Firestore)
-    await syncProductsToFirestore(products, excelUrl);
+    // Po vygenerování exportu naimportujeme produkty i do dashboardu (Firestore)
+    await syncProductsToFirestore(products, exportUrl);
 
     // Zkopírování odkazu do schránky
-    navigator.clipboard.writeText(excelUrl).then(
+    navigator.clipboard.writeText(exportUrl).then(
       () => {
         updateStatus("Odkaz zkopírován do schránky!", "success");
       },
@@ -999,34 +942,32 @@ async function finish() {
     );
 
     // Otevření WhatsApp
-    const whatsappUrl = `whatsapp://send?text=Zde je vygenerovaný Excel soubor: ${encodeURIComponent(excelUrl)}`;
+    const whatsappUrl = `whatsapp://send?text=Zde je vygenerovaný CSV soubor: ${encodeURIComponent(exportUrl)}`;
     window.location.href = whatsappUrl;
 
     savedProductsDiv.innerHTML =
       "<p>Soubor byl nahrán a odkaz zkopírován. Otevři WhatsApp a odešli zprávu.</p>";
   } catch (error) {
-    updateStatus(`Chyba při nahrávání Excelu: ${error.message}`, "error");
+    updateStatus(`Chyba při nahrávání CSV: ${error.message}`, "error");
   }
 }
 
 /* ---------------------------------
-   Funkce pro Excel s unikátním sufixem
+   Nahrání exportu (CSV) na Cloudinary
+   CSV je pro Cloudinary „raw“ soubor – ten si
+   příponu nedoplní sám, proto je .csv přímo
+   v public_id (jinak by odkaz neměl příponu).
 -----------------------------------*/
-async function uploadFileForExcel(file, randomSuffix) {
+async function uploadExportFile(file) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
-  // Připravíme datum
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2, "0");
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const yyyy = String(now.getFullYear());
-  const dateStr = dd + mm + yyyy; 
+  // Např. products_26032025_RA_ABCD.csv
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const publicId = file.name.replace(/\.csv$/, "") + "_" + randomSuffix + ".csv";
 
-  // Např. products_26032025_RA_ABCD
-  const publicId = `products_${dateStr}_${productIdPrefix}_${randomSuffix}`;
-
+  // Složka zůstává stejná jako u dřívějších Excelů, ať je vše na jednom místě.
   formData.append("folder", "excel_files");
   formData.append("public_id", publicId);
 
@@ -1036,7 +977,7 @@ async function uploadFileForExcel(file, randomSuffix) {
   });
   if (!resp.ok) {
     const errorText = await resp.text();
-    throw new Error(`Chyba při nahrávání Excelu: ${resp.status} - ${errorText}`);
+    throw new Error(`Chyba při nahrávání CSV: ${resp.status} - ${errorText}`);
   }
   const data = await resp.json();
   return data.secure_url;
@@ -1044,9 +985,9 @@ async function uploadFileForExcel(file, randomSuffix) {
 
 /* ---------------------------------
    Import produktů do dashboardu (Firestore)
-   – zavolá se v finish() po vytvoření Excelu.
+   – zavolá se v finish() po vytvoření exportu (CSV).
    Když Firebase není nastaven, tiše se přeskočí
-   a appka dál funguje jen s Excelem.
+   a appka dál funguje jen s exportem.
 -----------------------------------*/
 async function syncProductsToFirestore(products, excelUrl) {
   if (!window.db) {
@@ -1128,10 +1069,10 @@ async function syncProductsToFirestore(products, excelUrl) {
 }
 
 /* ---------------------------------
-   Uložení do databáze bez Excelu
+   Uložení do databáze bez exportu
    – pro ruční / zpětné zadávání, kdy
-     nechceš generovat Excel ani posílat
-     nic přes WhatsApp. Excel jde kdykoli
+     nechceš generovat CSV ani posílat
+     nic přes WhatsApp. CSV jde kdykoli
      později vyexportovat z dashboardu.
 -----------------------------------*/
 async function saveToDatabase() {
@@ -1159,7 +1100,7 @@ async function saveToDatabase() {
 
   if (savedProductsDiv) {
     savedProductsDiv.innerHTML =
-      `<p>Produkty jsou v databázi – najdeš je v <a href="dashboard.html">dashboardu</a>. Excel si odtamtud můžeš vyexportovat kdykoli později.</p>`;
+      `<p>Produkty jsou v databázi – najdeš je v <a href="dashboard.html">dashboardu</a>. CSV si odtamtud můžeš vyexportovat kdykoli později.</p>`;
   }
 }
 
