@@ -886,16 +886,21 @@ async function finish() {
     return;
   }
 
+  // Začátek aukcí: nejbližší celá hodina; stejný čas jde do dialogu i do souboru.
+  const startAt = window.defaultExportStart();
   const confirmed = await showConfirmModal({
     title: "Odeslat přes WhatsApp?",
     text:
       `Z ${window.pluralCz(products.length, "přidaného produktu", "přidaných produktů", "přidaných produktů")} ` +
-      "se vytvoří CSV, nahraje se a produkty se uloží do databáze.",
+      "se vytvoří CSV, nahraje se a produkty se uloží do databáze. " +
+      `Aukce začnou v ${startAt.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })}, ` +
+      `každá další o ${window.EXPORT_STAGGER_MINUTES} min později.`,
     confirmLabel: "Odeslat"
   });
   if (!confirmed) return;
 
   // Řádky v pořadí přidání → entityId 1 je první přidaný produkt (export.js).
+  // startingAt doplní export: nejbližší celá hodina, každý další +2 min.
   const rows = products.map((p) => ({
     name: p.name,
     language: p.language,
@@ -908,7 +913,6 @@ async function finish() {
     buyNowPriceCurrency: p.buyNowPriceCurrency,
     quantity: p.quantity,
     quantityUnit: p.quantityUnit,
-    startingAt: p.startingAt,
     duration: p.duration,
     reexposeType: p.reexposeType,
     location: p.location,
@@ -925,7 +929,7 @@ async function finish() {
 
   try {
     updateStatus("Nahrávám CSV na server…", "progress");
-    const file = window.exportCsvFile(window.buildExportCsv(rows), window.exportFileName(productIdPrefix || "export"));
+    const file = window.exportCsvFile(window.buildExportCsv(rows, startAt), window.exportFileName(productIdPrefix || "export"));
     const exportUrl = await uploadExportFile(file);
 
     // Po vygenerování exportu naimportujeme produkty i do dashboardu (Firestore)

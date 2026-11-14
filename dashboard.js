@@ -79,13 +79,6 @@ function noteOf(p) {
   if (p.note != null) return String(p.note);
   return p.raw && p.raw.note ? String(p.raw.note) : "";
 }
-// Startovní čas aukce = celá hodina, +1h (stejně jako v appce)
-function getRoundedISODate() {
-  const d = new Date();
-  d.setUTCMinutes(0, 0, 0);
-  d.setUTCHours(d.getUTCHours() + 1);
-  return d.toISOString().replace(".000Z", "Z");
-}
 
 /* --- Načtení dat --- */
 async function loadProducts() {
@@ -792,7 +785,6 @@ function toExportRow(p) {
     buyNowPriceCurrency: r.buyNowPriceCurrency || "CZK",
     quantity: r.quantity != null ? r.quantity : 1,
     quantityUnit: r.quantityUnit || "pieces",
-    startingAt: getRoundedISODate(),
     duration: r.duration != null ? r.duration : 7,
     reexposeType: r.reexposeType != null ? r.reexposeType : 0,
     location: r.location || JSON.stringify({ countryCode: "CZ", postCode: "789 01", city: "Zvole" }),
@@ -817,9 +809,167 @@ function idNumber(p) {
 
 // Stáhne dané produkty jako CSV pro Aukro. Řadí se od nejstaršího ID,
 // takže entityId 1 dostane první produkt (např. RA01) a poslední N.
-function writeCsv(items, fileSuffix) {
-  const sorted = items.slice().sort((a, b) => idNumber(a) - idNumber(b));
-  window.downloadExportCsv(window.buildExportCsv(sorted.map(toExportRow)), window.exportFileName(fileSuffix));
+function sortForExport(items) {
+  return items.slice().sort((a, b) => idNumber(a) - idNumber(b));
+}
+function writeCsv(sortedItems, fileSuffix, startAt) {
+  window.downloadExportCsv(
+    window.buildExportCsv(sortedItems.map(toExportRow), startAt),
+    window.exportFileName(fileSuffix)
+  );
+}
+
+/* ==========================================================
+   Kontrola před exportem
+   Než se CSV stáhne, ukáže se okno: volba začátku aukcí
+   (každý další produkt +2 min), seznam produktů v pořadí
+   exportu s kategorií a časem a upozornění na problémy.
+   ==========================================================*/
+const exportModal = document.getElementById("export-modal");
+const exportSummaryElem = document.getElementById("export-summary");
+const exportStartInput = document.getElementById("export-start");
+const exportStartHelp = document.getElementById("export-start-help");
+const exportIssuesElem = document.getElementById("export-issues");
+const exportCatsElem = document.getElementById("export-categories");
+const exportListElem = document.getElementById("export-list");
+const exportConfirmBtn = document.getElementById("export-confirm-btn");
+const exportConfirmText = document.getElementById("export-confirm-text");
+const exportCancelBtn = document.getElementById("export-cancel-btn");
+
+let exportJob = null; // { items (seřazené), suffix, successText }
+
+// Date ↔ hodnota pro <input type="datetime-local"> (místní čas)
+function toLocalInputValue(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function readExportStart() {
+  const v = exportStartInput.value;
+  if (!v) return null;
+  const d = new Date(v); // bez zóny = místní čas
+  return isNaN(d) ? null : d;
+}
+function fmtTime(d) {
+  return d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+}
+function fmtDateTime(d) {
+  return d.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function categoryLabel(p) {
+  if (p.category_id == null || p.category_id === "") return null;
+  return window.findCategoryName(categoryGroups, p.category_id) || `Kategorie ${p.category_id}`;
+}
+
+function openExportReview(items, suffix, successText) {
+  exportJob = { items: sortForExport(items), suffix, successText };
+  exportStartInput.value = toLocalInputValue(window.defaultExportStart());
+  exportStartInput.min = toLocalInputValue(new Date());
+  renderExportReview();
+  exportModal.classList.add("is-active");
+  exportModal.querySelector(".modal-content").scrollTop = 0;
+}
+
+function closeExportReview() {
+  exportModal.classList.remove("is-active");
+  exportJob = null;
+}
+
+function renderExportReview() {
+  if (!exportJob) return;
+  const items = exportJob.items;
+  const n = items.length;
+  const start = readExportStart();
+
+  exportSummaryElem.textContent =
+    `${window.pluralCz(n, "produkt", "produkty", "produktů")} · ` +
+    `každý další začne o ${window.EXPORT_STAGGER_MINUTES} min později.`;
+
+  // Čas začátku
+  const errors = [];
+  if (!start) {
+    errors.push("Vyber datum a čas začátku.");
+    exportStartHelp.textContent = "";
+  } else {
+    const last = window.exportStartFor(start, n - 1);
+    exportStartHelp.textContent =
+      n > 1 ? `První ${fmtDateTime(start)}, poslední ${fmtDateTime(last)}.` : `Začátek ${fmtDateTime(start)}.`;
+    if (start.getTime() < Date.now()) errors.push("Začátek je v minulosti – Aukro by aukce nevystavilo.");
+  }
+
+  // Upozornění k produktům (stažení nebrání, jen na ně upozorní)
+  const noCat = items.filter((p) => !categoryLabel(p));
+  const noPhoto = items.filter((p) => !imagesOf(p).length);
+  const noPrice = items.filter((p) => p.price == null || p.price === "");
+  const sold = items.filter((p) => p.sold);
+  const ids = (list) => list.map((p) => p.product_id || "bez ID").join(", ");
+  const warnings = [];
+  if (noCat.length) warnings.push(`Bez kategorie: ${ids(noCat)}`);
+  if (noPhoto.length) warnings.push(`Bez fotky: ${ids(noPhoto)}`);
+  if (noPrice.length) warnings.push(`Bez ceny: ${ids(noPrice)}`);
+  if (sold.length) warnings.push(`Už prodané: ${ids(sold)}`);
+
+  exportIssuesElem.innerHTML = "";
+  [...errors.map((t) => ["error", t]), ...warnings.map((t) => ["warning", t])].forEach(([type, text]) => {
+    const row = document.createElement("p");
+    row.className = "export-issue export-issue--" + type;
+    row.innerHTML = window.icon(type === "error" ? "x-circle" : "alert");
+    row.appendChild(document.createTextNode(text));
+    exportIssuesElem.appendChild(row);
+  });
+  exportIssuesElem.classList.toggle("is-hidden", !errors.length && !warnings.length);
+
+  // Kategorie: kolik produktů v které
+  const byCat = new Map();
+  items.forEach((p) => {
+    const label = categoryLabel(p) || "Bez kategorie";
+    byCat.set(label, (byCat.get(label) || 0) + 1);
+  });
+  exportCatsElem.innerHTML = "";
+  Array.from(byCat.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "cs"))
+    .forEach(([label, count]) => {
+      const chip = document.createElement("span");
+      chip.className = "export-cat" + (label === "Bez kategorie" ? " is-missing" : "");
+      chip.textContent = label;
+      const c = document.createElement("b");
+      c.textContent = count;
+      chip.appendChild(c);
+      exportCatsElem.appendChild(chip);
+    });
+
+  // Produkty v pořadí exportu
+  exportListElem.innerHTML = "";
+  items.forEach((p, i) => {
+    const li = document.createElement("li");
+    const cat = categoryLabel(p);
+    const img = imagesOf(p)[0];
+    li.className = "export-item" + (!cat || !img ? " has-issue" : "");
+    li.innerHTML = `
+      <span class="export-n">${i + 1}</span>
+      <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon("image")}</span>
+      <span class="export-info">
+        <span class="export-name"><b>${escapeHtml(p.product_id || "—")}</b> ${escapeHtml(displayName(p))}</span>
+        <span class="export-meta">${p.price != null ? escapeHtml(p.price) + " Kč" : "bez ceny"} · ${escapeHtml(cat || "Bez kategorie")}</span>
+      </span>
+      <time class="export-time">${start ? fmtTime(window.exportStartFor(start, i)) : "–"}</time>
+    `;
+    exportListElem.appendChild(li);
+  });
+
+  exportConfirmBtn.disabled = errors.length > 0;
+  exportConfirmText.textContent = warnings.length ? "Stáhnout i tak" : "Stáhnout CSV";
+}
+
+function confirmExport() {
+  const start = readExportStart();
+  if (!exportJob || !start || start.getTime() < Date.now()) {
+    renderExportReview(); // ukáže, co chybí
+    return;
+  }
+  const { items, suffix, successText } = exportJob;
+  writeCsv(items, suffix, start);
+  closeExportReview();
+  showStatus(`${successText} První začíná ${fmtDateTime(start)}.`, "success", 5000);
 }
 
 // Všechny neprodané produkty.
@@ -829,11 +979,10 @@ function exportAll() {
     showStatus("Žádné neprodané produkty k exportu.", "warning", 4000);
     return;
   }
-  writeCsv(items, "export");
-  showStatus(
-    `Vyexportováno ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} do CSV (prodané vynechány).`,
-    "success",
-    4000
+  openExportReview(
+    items,
+    "export",
+    `Vyexportováno ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} do CSV (prodané vynechány).`
   );
 }
 
@@ -845,11 +994,10 @@ function exportSelected() {
     showStatus("Nejdřív označ produkty, které chceš exportovat.", "warning", 4000);
     return;
   }
-  writeCsv(items, "vyber");
-  showStatus(
-    `Vyexportováno do CSV: ${window.pluralCz(items.length, "vybraný produkt", "vybrané produkty", "vybraných produktů")}.`,
-    "success",
-    4000
+  openExportReview(
+    items,
+    "vyber",
+    `Vyexportováno do CSV: ${window.pluralCz(items.length, "vybraný produkt", "vybrané produkty", "vybraných produktů")}.`
   );
 }
 
@@ -873,6 +1021,12 @@ exportSelectedBtn.addEventListener("click", exportSelected);
 selectAllBtn.addEventListener("click", toggleSelectAllVisible);
 selectionClearBtn.addEventListener("click", clearSelection);
 statusMsg.addEventListener("click", hideStatus);
+
+/* --- Události kontroly exportu --- */
+exportStartInput.addEventListener("input", renderExportReview);
+exportConfirmBtn.addEventListener("click", confirmExport);
+exportCancelBtn.addEventListener("click", closeExportReview);
+exportModal.querySelector(".modal-background").addEventListener("click", closeExportReview);
 photoModal
   .querySelectorAll(".modal-background, .modal-close")
   .forEach((el) => el.addEventListener("click", closePhotos));
@@ -928,6 +1082,7 @@ document.addEventListener("keydown", (e) => {
   if (document.querySelector("#crop-modal.is-active")) return;
   closePhotos();
   closeEdit();
+  closeExportReview();
 });
 
 /* --- Start (až po přihlášení vlastníka) --- */

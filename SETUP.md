@@ -150,6 +150,15 @@ Oba exporty – soubor poslaný přes WhatsApp i stažení z dashboardu – jsou
 - oddělovač čárka, mezi řádky CRLF, za posledním řádkem nic,
 - v HTML popisu `&` místo `&amp;` (v databázi zůstává popis beze změny).
 
+- **Začátky aukcí:** první produkt začíná ve zvolený čas, každý další
+  o **2 minuty** později (entityId 1 → 18:00, 2 → 18:02 …).
+- **Kontrola před stažením (dashboard):** po kliknutí na export se ukáže
+  okno s volbou data a času začátku, seznamem produktů v pořadí exportu
+  (s kategorií, cenou a časem) a souhrnem kategorií. Upozorní na produkty
+  bez kategorie, fotky či ceny a na prodané ve výběru; čas v minulosti
+  stažení zablokuje.
+- **WhatsApp z appky** bere jako začátek nejbližší celou hodinu (čas je
+  vidět v potvrzovacím dialogu), dál po 2 minutách.
 - **entityId** se v každém souboru čísluje znovu: první řádek **1**,
   druhý **2** … poslední **N** (u 10 produktů 1–10). Je tak vždy unikátní.
 - Pořadí řádků: v appce podle toho, jak byly produkty přidané; v dashboardu

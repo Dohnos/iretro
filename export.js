@@ -8,6 +8,9 @@
    - logické hodnoty jako TRUE / FALSE
    - v HTML popisu „&“ místo „&amp;“
 
+   Začátky aukcí: první produkt začíná ve zvolený čas, každý další
+   o 2 minuty později (entityId 1 → čas, 2 → +2 min, 3 → +4 min …).
+
    entityId se v každém souboru čísluje znovu od 1: první řádek 1,
    druhý 2 … poslední N. Je tak vždy unikátní v rámci souboru
    a nezávisí na tom, kdy a kde byl produkt přidaný.
@@ -24,6 +27,28 @@
   ];
   window.EXPORT_HEADERS = EXPORT_HEADERS;
 
+  // Rozestup začátků aukcí mezi produkty v jednom exportu.
+  const STAGGER_MINUTES = 2;
+  window.EXPORT_STAGGER_MINUTES = STAGGER_MINUTES;
+
+  // Výchozí začátek: nejbližší celá hodina v budoucnu (jako dřív).
+  window.defaultExportStart = function () {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 1);
+    return d;
+  };
+
+  // Začátek aukce produktu na pozici index (0 = první řádek).
+  window.exportStartFor = function (startAt, index) {
+    return new Date(startAt.getTime() + index * STAGGER_MINUTES * 60 * 1000);
+  };
+
+  // Formát, jaký Aukro bere: 2026-11-14T17:00:00Z (UTC, bez milisekund).
+  function aukroIso(date) {
+    return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
   // Jedna buňka podle RFC 4180: do uvozovek jen když je potřeba
   // (čárka, uvozovka, konec řádku, mezera na kraji); uvozovky se zdvojí.
   // Popis nabídky je HTML plné uvozovek, takže tohle je důležité.
@@ -35,11 +60,16 @@
     return s;
   }
 
-  // Řádky (objekty se sloupci výše) → text CSV. entityId se přečísluje 1…N.
-  window.buildExportCsv = function (rows) {
+  // Řádky (objekty se sloupci výše) → text CSV. entityId se přečísluje 1…N
+  // a startingAt se nastaví od startAt po 2 minutách.
+  window.buildExportCsv = function (rows, startAt) {
+    const start = startAt || window.defaultExportStart();
     const lines = [EXPORT_HEADERS.join(",")];
     rows.forEach((row, i) => {
-      const numbered = Object.assign({}, row, { entityId: i + 1 });
+      const numbered = Object.assign({}, row, {
+        entityId: i + 1,
+        startingAt: aukroIso(window.exportStartFor(start, i))
+      });
       // Uložený popis zůstává v databázi beze změny; jen do exportu jde
       // „&“ místo „&amp;“, stejně jako v souboru, který Aukro přijalo.
       if (typeof numbered.description === "string") {

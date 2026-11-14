@@ -120,6 +120,49 @@
     <button class="modal-close btn btn--icon" aria-label="Zavřít"><i data-icon="x"></i></button>
   </div>
 
+  <!-- Kontrola před exportem: čas začátku, produkty, kategorie -->
+  <div id="export-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content export-modal-content">
+      <div class="box">
+        <p class="modal-title">Kontrola exportu</p>
+        <p class="modal-text" id="export-summary"></p>
+
+        <!-- Začátek aukcí -->
+        <div class="field">
+          <label for="export-start" class="label">Začátek prvního produktu</label>
+          <input id="export-start" type="datetime-local" class="input" step="60" />
+          <p class="help" id="export-start-help"></p>
+        </div>
+
+        <!-- Upozornění (chybějící kategorie, fotky, čas v minulosti…) -->
+        <div id="export-issues" class="export-issues is-hidden" role="alert"></div>
+
+        <!-- Kategorie -->
+        <div class="field">
+          <span class="label">Kategorie</span>
+          <div id="export-categories" class="export-cats"></div>
+        </div>
+
+        <!-- Produkty -->
+        <div class="field">
+          <span class="label">Produkty v pořadí exportu</span>
+          <ol id="export-list" class="export-list"></ol>
+        </div>
+
+        <div class="edit-modal-buttons">
+          <span></span>
+          <span class="edit-modal-buttons-right">
+            <button type="button" id="export-cancel-btn" class="btn btn--ghost">Zrušit</button>
+            <button type="button" id="export-confirm-btn" class="btn">
+              <i data-icon="download"></i> <span id="export-confirm-text">Stáhnout CSV</span>
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modál úpravy produktu -->
   <div id="edit-modal" class="modal">
     <div class="modal-background"></div>
