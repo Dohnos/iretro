@@ -47,6 +47,9 @@
         <i data-icon="history"></i> Přidat zpětně
       </a>
       <span class="dash-actions-gap"></span>
+      <button id="bulk-sold-btn" class="btn btn--ghost" title="Vlož názvy prodaných aukcí a označ je najednou">
+        <i data-icon="check-square"></i> Hromadně prodané
+      </button>
       <button id="export-btn" class="btn btn--ghost" title="Vyexportuje všechny neprodané produkty">
         <i data-icon="download"></i> Export všech neprodaných
       </button>
@@ -118,6 +121,39 @@
       <div id="photo-modal-body" class="dash-photo-modal"></div>
     </div>
     <button class="modal-close btn btn--icon" aria-label="Zavřít"><i data-icon="x"></i></button>
+  </div>
+
+  <!-- Hromadné označení prodaných: vložený text → ID za „|“ → náhled → zápis -->
+  <div id="bulk-sold-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content bulk-sold-content">
+      <div class="box">
+        <p class="modal-title">Hromadně označit prodané</p>
+        <p class="modal-text">
+          Vlož názvy prodaných aukcí – klidně celý text zkopírovaný z Aukra.
+          Z každého názvu se vezme ID za znakem <code>|</code> (např. RA86).
+        </p>
+
+        <div class="field">
+          <label for="bulk-sold-input" class="label">Názvy prodaných aukcí</label>
+          <textarea id="bulk-sold-input" class="textarea" rows="7" spellcheck="false"
+                    placeholder="PRIM KROUŽEK NÁDHERNÉ | RA86&#10;PRIM BERUŠKA NÁDHERNÉ | RA87"></textarea>
+        </div>
+
+        <div id="bulk-sold-summary" class="bulk-summary is-hidden" aria-live="polite"></div>
+        <ol id="bulk-sold-list" class="bulk-list"></ol>
+
+        <div class="edit-modal-buttons">
+          <span></span>
+          <span class="edit-modal-buttons-right">
+            <button type="button" id="bulk-sold-cancel" class="btn btn--ghost">Zrušit</button>
+            <button type="button" id="bulk-sold-confirm" class="btn" disabled>
+              <i data-icon="check"></i> <span id="bulk-sold-confirm-text">Označit prodané</span>
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Kontrola před exportem: čas začátku, produkty, kategorie -->

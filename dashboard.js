@@ -346,6 +346,153 @@ async function toggleSold(p, btn) {
 }
 
 /* ==========================================================
+   Hromadné označení prodaných
+   Uživatel vloží názvy prodaných aukcí (třeba celý text zkopírovaný
+   z Aukra). Z každého „… | RA86“ se vezme ID za svislítkem, ukáže
+   se náhled a teprve po potvrzení se vše zapíše najednou.
+   ==========================================================*/
+const bulkSoldModal = document.getElementById("bulk-sold-modal");
+const bulkSoldInput = document.getElementById("bulk-sold-input");
+const bulkSoldSummary = document.getElementById("bulk-sold-summary");
+const bulkSoldList = document.getElementById("bulk-sold-list");
+const bulkSoldConfirm = document.getElementById("bulk-sold-confirm");
+const bulkSoldConfirmText = document.getElementById("bulk-sold-confirm-text");
+let bulkSoldPlan = null; // { toMark: [produkty], ... } z posledního rozboru textu
+
+// Normalizovaný klíč ID: „ra086“ i „RA86“ → „RA86“.
+function idKey(prefix, num) {
+  return String(prefix).toUpperCase() + parseInt(num, 10);
+}
+function productIdKey(p) {
+  const m = /^([A-Za-z]+)(\d+)$/.exec(p.product_id || "");
+  return m ? idKey(m[1], m[2]) : null;
+}
+
+// Z vloženého textu vytáhne ID v pořadí, jak jsou v textu, bez duplicit.
+// Bere „| RA86“ (i když je ID až na dalším řádku, jak se to zalomí
+// při kopírování z mobilu) a řádek, na kterém je jen samotné ID.
+function parseSoldIds(text) {
+  const src = String(text || "");
+  const hits = [];
+  const patterns = [
+    /\|\s*([A-Za-z]{1,6})\s*(\d{1,6})(?!\d)/g,          // „… | RA86“
+    /^[ \t]*([A-Za-z]{1,6})(\d{1,6})[ \t]*$/gm            // řádek „RA86“
+  ];
+  patterns.forEach((re) => {
+    let m;
+    while ((m = re.exec(src))) hits.push({ at: m.index, key: idKey(m[1], m[2]) });
+  });
+  hits.sort((a, b) => a.at - b.at);
+  return Array.from(new Set(hits.map((h) => h.key)));
+}
+
+function openBulkSold() {
+  bulkSoldInput.value = "";
+  renderBulkSold();
+  bulkSoldModal.classList.add("is-active");
+  bulkSoldInput.focus();
+}
+function closeBulkSold() {
+  if (bulkSoldConfirm.classList.contains("is-loading")) return; // právě se ukládá
+  bulkSoldModal.classList.remove("is-active");
+  bulkSoldPlan = null;
+}
+
+function renderBulkSold() {
+  const ids = parseSoldIds(bulkSoldInput.value);
+  const byKey = new Map();
+  allProducts.forEach((p) => {
+    const key = productIdKey(p);
+    if (key) byKey.set(key, p);
+  });
+
+  const rows = ids.map((key) => {
+    const p = byKey.get(key);
+    if (!p) return { key, p: null, status: "missing" };
+    return { key, p, status: p.sold ? "already" : "mark" };
+  });
+  const toMark = rows.filter((r) => r.status === "mark").map((r) => r.p);
+  const already = rows.filter((r) => r.status === "already").length;
+  const missing = rows.filter((r) => r.status === "missing").length;
+  bulkSoldPlan = { toMark };
+
+  // Souhrn
+  if (!ids.length) {
+    bulkSoldSummary.classList.toggle("is-hidden", !bulkSoldInput.value.trim());
+    bulkSoldSummary.textContent = "V textu jsem nenašel žádné ID za „|“.";
+  } else {
+    bulkSoldSummary.classList.remove("is-hidden");
+    const parts = [`Nalezeno ${window.pluralCz(ids.length, "ID", "ID", "ID")}`];
+    parts.push(`označí se ${toMark.length}`);
+    if (already) parts.push(`už prodané ${already}`);
+    if (missing) parts.push(`nenalezeno ${missing}`);
+    bulkSoldSummary.textContent = parts.join(" · ");
+  }
+
+  // Seznam: nejdřív co se označí, pak ostatní
+  const order = { mark: 0, already: 1, missing: 2 };
+  const LABEL = { mark: "označí se", already: "už prodaný", missing: "není v databázi" };
+  bulkSoldList.innerHTML = "";
+  rows
+    .slice()
+    .sort((a, b) => order[a.status] - order[b.status])
+    .forEach((r) => {
+      const li = document.createElement("li");
+      li.className = "bulk-item bulk-item--" + r.status;
+      const img = r.p && imagesOf(r.p)[0];
+      li.innerHTML = `
+        <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon(r.p ? "image" : "x")}</span>
+        <span class="export-info">
+          <span class="export-name"><b>${escapeHtml(r.p ? r.p.product_id : r.key)}</b> ${r.p ? escapeHtml(displayName(r.p)) : ""}</span>
+          <span class="export-meta">${r.p && r.p.price != null ? escapeHtml(r.p.price) + " Kč" : r.p ? "bez ceny" : "Zkontroluj ID – produkt s ním v databázi není."}</span>
+        </span>
+        <span class="bulk-status">${r.status === "mark" ? window.icon("check") : ""}${LABEL[r.status]}</span>
+      `;
+      bulkSoldList.appendChild(li);
+    });
+
+  bulkSoldConfirm.disabled = toMark.length === 0;
+  // Krátký popisek, ať se tlačítko vejde i na úzký telefon.
+  bulkSoldConfirmText.textContent = toMark.length ? `Označit prodané (${toMark.length})` : "Označit prodané";
+}
+
+async function confirmBulkSold() {
+  if (!window.db || !bulkSoldPlan || !bulkSoldPlan.toMark.length) return;
+  const items = bulkSoldPlan.toMark.slice();
+  const soldAt = new Date().toISOString();
+
+  bulkSoldConfirm.classList.add("is-loading");
+  try {
+    // Firestore batch = vše, nebo nic (po dávkách, limit je 500 zápisů).
+    const col = window.db.collection("products");
+    for (let i = 0; i < items.length; i += 400) {
+      const batch = window.db.batch();
+      items.slice(i, i + 400).forEach((p) => batch.update(col.doc(p._docId), { sold: true, sold_at: soldAt }));
+      await batch.commit();
+    }
+  } catch (e) {
+    bulkSoldConfirm.classList.remove("is-loading");
+    bulkSoldSummary.classList.remove("is-hidden");
+    bulkSoldSummary.textContent = "Uložení selhalo: " + (e.message || e);
+    return;
+  }
+  bulkSoldConfirm.classList.remove("is-loading");
+
+  items.forEach((p) => {
+    p.sold = true;
+    p.sold_at = soldAt;
+  });
+  closeBulkSold();
+  updateStats();
+  render();
+  showStatus(
+    `Označeno jako prodané: ${window.pluralCz(items.length, "produkt", "produkty", "produktů")} (${items.map((p) => p.product_id).join(", ")}).`,
+    "success",
+    6000
+  );
+}
+
+/* ==========================================================
    Úprava produktu
    Uloží se jak "ploché" sloupce (pro dashboard), tak odpovídající
    pole v "raw" – z toho se skládá export pro Aukro, ať se obojí
@@ -1037,6 +1184,13 @@ selectAllBtn.addEventListener("click", toggleSelectAllVisible);
 selectionClearBtn.addEventListener("click", clearSelection);
 statusMsg.addEventListener("click", hideStatus);
 
+/* --- Události hromadného označení prodaných --- */
+document.getElementById("bulk-sold-btn").addEventListener("click", openBulkSold);
+bulkSoldInput.addEventListener("input", renderBulkSold);
+bulkSoldConfirm.addEventListener("click", confirmBulkSold);
+document.getElementById("bulk-sold-cancel").addEventListener("click", closeBulkSold);
+bulkSoldModal.querySelector(".modal-background").addEventListener("click", closeBulkSold);
+
 /* --- Události kontroly exportu --- */
 exportStartInput.addEventListener("input", renderExportReview);
 exportConfirmBtn.addEventListener("click", confirmExport);
@@ -1102,6 +1256,7 @@ document.addEventListener("keydown", (e) => {
   }
   closePhotos();
   closeExportReview();
+  closeBulkSold();
 });
 
 /* --- Start (až po přihlášení vlastníka) --- */

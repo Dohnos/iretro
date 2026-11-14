@@ -846,6 +846,82 @@
   font-weight: 600;
 }
 
+/* --------------------------------------------------------------------------
+   Hromadné označení prodaných
+   -------------------------------------------------------------------------- */
+.bulk-sold-content {
+  max-width: 560px;
+}
+/* Potvrzovací tlačítko vyplní zbytek lišty a lícuje s obsahem. */
+.bulk-sold-content .edit-modal-buttons-right {
+  flex: 1;
+  min-width: 0;
+}
+.bulk-sold-content #bulk-sold-confirm {
+  flex: 1;
+  min-width: 0;
+  padding: 0 12px;
+}
+.bulk-summary {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 0.86rem;
+  font-weight: 600;
+  animation: rise 0.25s var(--ease);
+}
+.bulk-list {
+  margin: 0 0 18px;
+  padding: 0;
+  list-style: none;
+}
+.bulk-list:empty {
+  display: none;
+}
+.bulk-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  animation: rise 0.25s var(--ease);
+}
+.bulk-item + .bulk-item {
+  border-top: 1px solid var(--line);
+}
+.bulk-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bulk-status .icon {
+  width: 13px;
+  height: 13px;
+}
+/* Označí se = plná inverze; už prodaný = tlumeně; nenalezeno = čárkovaný rámeček. */
+.bulk-item--mark .bulk-status {
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+}
+.bulk-item--already {
+  opacity: 0.55;
+}
+.bulk-item--already .bulk-status {
+  border: 1px solid var(--line-strong);
+}
+.bulk-item--missing .bulk-status {
+  border: 1px dashed var(--fg);
+}
+.bulk-item--missing .export-meta {
+  color: var(--fg);
+}
+
 /* Po načtení karty najíždějí; při hledání a filtrování už ne (blikalo by to). */
 .dash-grid.no-anim .prod-card {
   animation: none;

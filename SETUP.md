@@ -182,6 +182,18 @@ Dashboard nestahuje plné fotky (1600 px): karty berou z Cloudinary náhled
 480 px a načítají se až při doscrollování. Kdyby Cloudinary transformace
 odmítl, obrázek se sám přepne na originál.
 
+## ✅ Hromadné označení prodaných
+V dashboardu tlačítko **Hromadně prodané** otevře okno, kam vložíš názvy
+prodaných aukcí – klidně celý text zkopírovaný z přehledu prodaných na Aukru.
+Z každého názvu se vezme ID za znakem `|` (např. `PRIM KROUŽEK | RA86` →
+`RA86`); funguje i když je ID zalomené na další řádek nebo stojí samo
+na řádku. Čísla aukcí, ceny a ostatní text se ignorují.
+
+Před uložením je vidět náhled: co se **označí**, co je **už prodané**
+a které ID **v databázi není**. Teprve tlačítko **Označit prodané (N)**
+zapíše vše najednou (`sold: true`, `sold_at`). Omylem označený produkt
+vrátíš na kartě tlačítkem **Vrátit**.
+
 ## ✏️ Úprava produktů v databázi
 V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
 
