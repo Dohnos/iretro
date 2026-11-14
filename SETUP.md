@@ -1,7 +1,7 @@
 # 🚀 iAUKRO – návod: Firebase + Vercel
 
 Aplikace má dvě části, které sdílí jednu databázi:
-- **`index.html`** 📷 – appka na focení a přípravu produktů (generuje Excel + importuje do databáze)
+- **`index.html`** 📷 – appka na focení a přípravu produktů (generuje CSV pro Aukro + importuje do databáze)
 - **`dashboard.html`** 📊 – přehled všech produktů (ID, název, datum, fotky)
 
 Databáze = **Cloud Firestore** (Firebase), přihlášení = **Firebase Auth**, hosting = **Vercel**.
@@ -104,9 +104,9 @@ Co se v tomhle režimu změní:
   data pořízení první vybrané fotky. Uloží se do databáze (`date_added`
   i `created_at`), takže produkt je v dashboardu u správného dne.
 - **Stačí 1 fotka** – nemusíš mít 3 (v režimu focení jsou 3 dál povinné).
-- **Uložit do databáze (bez Excelu)** – v posledním kroku přibylo tlačítko,
-  které produkty jen zapíše do Firestore, bez generování Excelu a odesílání
-  přes WhatsApp. Excel si pak kdykoli vyexportuješ z dashboardu.
+- **Uložit do databáze (bez exportu)** – v posledním kroku přibylo tlačítko,
+  které produkty jen zapíše do Firestore, bez generování CSV a odesílání
+  přes WhatsApp. CSV si pak kdykoli vyexportuješ z dashboardu.
 
 ID produktů se chovají stejně jako při focení – navazují na nejvyšší už použité
 ID a nejde je použít podruhé.
@@ -130,7 +130,7 @@ jako dřív; další fotky se přidávají přímo tam dlaždicemi **Vyfotit** /
 
 ## ☑️ Export jen vybraných produktů
 Každá karta v dashboardu má vlevo nahoře zaškrtávátko. Jakmile něco označíš,
-vyjede dole lišta s počtem a tlačítkem **Exportovat vybrané** – do Excelu
+vyjede dole lišta s počtem a tlačítkem **Exportovat vybrané** – do CSV
 půjdou přesně označené produkty (i prodané, pokud si je vybereš).
 **Vybrat vše** označí to, co je právě vidět po hledání a filtru.
 Tlačítko **Export všech neprodaných** funguje jako dřív.
@@ -140,6 +140,18 @@ Nové fotky se v modálu **Upravit** nejdřív jen ořežou a označí štítkem
 **nová**. Na Cloudinary se nahrají až po kliknutí na **Uložit** – zrušená
 úprava tak na Cloudinary nic nenechá. Když nahrávání selže (síť), modál
 zůstane otevřený a další **Uložit** nahraje jen to, co ještě chybí.
+
+## 📄 Export pro Aukro (CSV)
+Oba exporty – soubor poslaný přes WhatsApp i stažení z dashboardu – jsou
+**CSV v UTF-8** (oddělovač čárka, s BOM, aby Excel správně ukázal háčky).
+Skládá je `export.js`.
+
+- **entityId** se v každém souboru čísluje znovu: první řádek **1**,
+  druhý **2** … poslední **N** (u 10 produktů 1–10). Je tak vždy unikátní.
+- Pořadí řádků: v appce podle toho, jak byly produkty přidané; v dashboardu
+  podle čísla ID od nejnižšího (RA01 → entityId 1).
+- Popis nabídky (HTML s uvozovkami) je v CSV správně uzavřený v uvozovkách.
+- `priorityListing`, `boldTitle`, `highlight` jsou zapsané jako `true` / `false`.
 
 ## 🎨 Vzhled
 Appka i dashboard mají vlastní černobílý design bez CSS frameworku
@@ -174,7 +186,7 @@ V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou zm�
 dvojímu použití ID).
 
 Úprava se ukládá do „plochých“ sloupců i do pole `raw`, ze kterého se skládá
-Excel pro Aukro – export z dashboardu tak vždycky odpovídá tomu, co je vidět
+export pro Aukro – export z dashboardu tak vždycky odpovídá tomu, co je vidět
 na kartě.
 
 ### 🗑️ Smazání produktu
@@ -193,6 +205,6 @@ git push
 Na Vercelu je to statický web – **Framework Preset: Other**, Build & Output nech prázdné.
 
 ## ✅ Hotovo
-- Focení a generování Excelu funguje jako dřív. 📸
+- Focení a generování exportu (CSV) funguje jako dřív. 📸
 - Po přihlášení se produkty ukládají do **Firestore** a hned se objeví v **dashboardu**. 🗄️
 - Data vidíš i ručně ve **Firebase Console → Firestore Database**. 🧹
