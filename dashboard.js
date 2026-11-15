@@ -1188,6 +1188,37 @@ const exportConfirmText = document.getElementById("export-confirm-text");
 const exportCancelBtn = document.getElementById("export-cancel-btn");
 
 let exportJob = null; // { items (seřazené), suffix, successText }
+const exportPromosElem = document.getElementById("export-promos");
+
+// Varianty topování na Aukru (sloupce v DB / v raw pro export).
+const PROMOS = [
+  { key: "priority_listing", raw: "priorityListing", icon: "star", label: "Přednostní výpis", short: "Přednostní" },
+  { key: "bold_title", raw: "boldTitle", icon: "bold", label: "Tučný titulek", short: "Tučný" },
+  { key: "highlight", raw: "highlight", icon: "highlighter", label: "Zvýraznění", short: "Zvýraznění" }
+];
+
+// Zapne / vypne jedno topování přímo z kontroly exportu (uloží se hned).
+async function toggleExportPromo(p, pr, chip) {
+  if (!window.db || chip.classList.contains("is-loading")) return;
+  const newVal = !p[pr.key];
+  chip.classList.add("is-loading");
+  const patch = { [pr.key]: newVal, updated_at: new Date().toISOString() };
+  // „raw“ drží podobu pro export – měníme jen to jedno pole uvnitř.
+  patch["raw." + pr.raw] = newVal;
+  try {
+    await window.db.collection("products").doc(p._docId).update(patch);
+  } catch (e) {
+    chip.classList.remove("is-loading");
+    showStatus("Topování se nepodařilo uložit: " + (e.message || e), "error");
+    return;
+  }
+  p[pr.key] = newVal;
+  p.raw = Object.assign({}, p.raw || {}, { [pr.raw]: newVal });
+  if (exportJob) {
+    exportJob.lastEditedId = null; // bez bliknutí celého řádku – změna je vidět na přepínači
+    renderExportReview();
+  }
+}
 
 // Date ↔ hodnota pro <input type="datetime-local"> (místní čas)
 function toLocalInputValue(d) {
@@ -1269,6 +1300,28 @@ function renderExportReview() {
   });
   exportIssuesElem.classList.toggle("is-hidden", !errors.length && !warnings.length);
 
+  // Topování: kolik produktů má kterou variantu
+  exportPromosElem.innerHTML = "";
+  PROMOS.forEach((pr) => {
+    const count = items.filter((p) => !!p[pr.key]).length;
+    const chip = document.createElement("span");
+    chip.className = "export-cat" + (count ? " is-on" : "");
+    chip.innerHTML = window.icon(pr.icon);
+    chip.appendChild(document.createTextNode(pr.label));
+    const c = document.createElement("b");
+    c.textContent = count;
+    chip.appendChild(c);
+    exportPromosElem.appendChild(chip);
+  });
+  const plain = items.filter((p) => !PROMOS.some((pr) => !!p[pr.key])).length;
+  const plainChip = document.createElement("span");
+  plainChip.className = "export-cat";
+  plainChip.textContent = "Bez topování";
+  const pc = document.createElement("b");
+  pc.textContent = plain;
+  plainChip.appendChild(pc);
+  exportPromosElem.appendChild(plainChip);
+
   // Kategorie: kolik produktů v které
   const byCat = new Map();
   items.forEach((p) => {
@@ -1294,7 +1347,9 @@ function renderExportReview() {
     const li = document.createElement("li");
     const cat = categoryLabel(p);
     const img = imagesOf(p)[0];
+    const promoted = PROMOS.some((pr) => !!p[pr.key]);
     li.className = "export-item" + (!cat || !img ? " has-issue" : "") +
+      (promoted ? " is-promoted" : "") +
       (p._docId === exportJob.lastEditedId ? " is-updated" : "");
     // Celý řádek je tlačítko: otevře úpravu produktu nad kontrolou exportu.
     li.innerHTML = `
@@ -1308,8 +1363,23 @@ function renderExportReview() {
         <time class="export-time">${start ? fmtTime(window.exportStartFor(start, i)) : "–"}</time>
         <span class="export-edit">${window.icon("pencil")}</span>
       </button>
+      <div class="export-promos" role="group" aria-label="Topování ${escapeHtml(p.product_id || "")}"></div>
     `;
-    li.querySelector("button").addEventListener("click", () => openEdit(p));
+    li.querySelector(".export-item-btn").addEventListener("click", () => openEdit(p));
+    // Přepínače topování – mění se rovnou v databázi.
+    const promosBox = li.querySelector(".export-promos");
+    PROMOS.forEach((pr) => {
+      const on = !!p[pr.key];
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "promo-chip";
+      chip.dataset.promo = pr.key;
+      chip.setAttribute("aria-pressed", on ? "true" : "false");
+      chip.title = (on ? "Zrušit: " : "Zapnout: ") + pr.label;
+      chip.innerHTML = window.icon(pr.icon) + `<span>${pr.short}</span>`;
+      chip.addEventListener("click", () => toggleExportPromo(p, pr, chip));
+      promosBox.appendChild(chip);
+    });
     exportListElem.appendChild(li);
   });
 

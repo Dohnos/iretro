@@ -733,6 +733,21 @@
   border-color: var(--fg);
   font-weight: 600;
 }
+.export-cat .icon {
+  width: 14px;
+  height: 14px;
+  margin-left: -2px;
+}
+/* Souhrn topování: varianta, kterou má aspoň jeden produkt, je plná. */
+.export-cat.is-on {
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  border-color: var(--inverse-bg);
+}
+.export-cat.is-on b {
+  background: var(--inverse-fg);
+  color: var(--inverse-bg);
+}
 
 .export-list {
   margin: 0;
@@ -847,6 +862,55 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+/* Přepínače topování pod řádkem – zarovnané pod název produktu. */
+.export-promos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 10px 98px; /* 12 + číslo 26 + 10 + fotka 40 + 10 */
+}
+.promo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.promo-chip .icon {
+  width: 13px;
+  height: 13px;
+}
+.promo-chip:hover {
+  border-color: var(--fg);
+  color: var(--fg);
+}
+.promo-chip:active {
+  transform: scale(0.95);
+}
+.promo-chip[aria-pressed="true"] {
+  background: var(--inverse-bg);
+  border-color: var(--inverse-bg);
+  color: var(--inverse-fg);
+  animation: pop 0.25s var(--ease);
+}
+.promo-chip.is-loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+/* Topovaný produkt má vlevo výraznou linku, ať je v seznamu hned vidět. */
+.export-item.is-promoted {
+  box-shadow: inset 3px 0 0 var(--fg);
+}
+
 /* Produkt bez kategorie nebo fotky je vidět i v seznamu. */
 .export-item.has-issue .export-meta {
   color: var(--fg);
@@ -990,6 +1054,10 @@
   }
 }
 @media (max-width: 480px) {
+  /* Na telefonu přepínače topování přes celou šířku řádku. */
+  .export-promos {
+    padding-left: 12px;
+  }
   /* Lišta akcí v úpravě zůstane v jedné řadě: u Smazat jen koš. */
   #edit-delete-btn .btn-label {
     display: none;
