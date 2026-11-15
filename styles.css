@@ -564,6 +564,43 @@ code {
   color: var(--fg);
 }
 
+/* Návrh ceny podle prodaných podobných předmětů */
+.price-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  animation: pop 0.25s var(--ease);
+}
+.price-hint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-pill);
+  background: var(--fg);
+  color: var(--bg);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: opacity var(--fast) var(--ease);
+}
+.price-hint-chip:hover {
+  opacity: 0.85;
+}
+.price-hint-chip .icon {
+  width: 14px;
+  height: 14px;
+}
+.price-hint-text {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 /* Informační řádek (poslední ID, zpětné datum…) */
 .note-line {
   display: flex;

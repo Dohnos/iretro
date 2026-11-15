@@ -225,6 +225,33 @@ prodaný **neoznačí** – v náhledu je u něj varování „neoznačí se“ 
 uložení hláška vyjmenuje, co bylo přeskočeno. Seznam jmen je
 v `dashboard.js` (`BULK_SOLD_SKIP_BUYERS`).
 
+## 💰 Ceny prodejů, graf a návrh ceny
+V dashboardu tlačítko **Ceny prodejů** otevře okno, kam vložíš skončené
+aukce zkopírované z Aukra – stejný text jako u hromadně prodaných.
+Z každé aukce se vezme ID za `|`, číslo aukce `(7140052063)`, konec aukce,
+kupující a cena (`Cena 1 189 Kč` i `Kup teď 402 Kč`). Náhled ukáže, kolik
+aukcí je **nových**, kolik **už uložených** a které ID **v databázi není**;
+teprve **Uložit ceny (N)** je zapíše k produktům (pole `sales`).
+
+- Klíčem je číslo aukce, takže opakované vložení stejného textu nic
+  nezdvojí. Jeden produkt může mít víc aukcí (znovu vystavený předmět).
+- Aukce, kterou „vyhrál“ **Aledas nebo Ebisu**, se uloží jako
+  **odkoupená** – v grafu je vidět (dutý bod), ale do ceny prodeje
+  ani do návrhu ceny se nepočítá.
+- Na kartě produktu je řádek **Prodáno 2 035 Kč · 31. 10.** (poslední
+  skutečný prodej, případně počet aukcí). Klik otevře **Historii cen**:
+  graf všech aukcí v čase a pod ním jejich seznam.
+
+**Návrh ceny v appce:** při psaní názvu se pod cenou ukáže
+`≈ 250 Kč` podle prodaných podobných předmětů (stejná slova v názvu –
+autor, výrobce, typ předmětu; obecná slova jako „nádherný“, „starožitný“,
+„retro“ se nepočítají; stejná kategorie návrh zpřesní). Klik cenu vyplní.
+
+**Popisky aktualizací:** pod statistikami svítí datum posledního importu
+**Ceny prodejů** a posledního **Hromadně prodané**. Ukládají se do
+dokumentu `products/_meta` (pravidla Firestore povolují jen kolekci
+`products`; dashboard ani appka ho mezi produkty nepočítají).
+
 ## ✏️ Úprava produktů v databázi
 V dashboardu má každá karta tlačítko **✏️ Upravit**. V modálu jdou změnit:
 

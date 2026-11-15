@@ -9,6 +9,10 @@
 
 let allProducts = [];
 
+// Dokument products/_meta: kdy se naposled nahrály ceny prodejů
+// (prices_updated_at) a hromadně prodané (sold_updated_at).
+let dashMeta = {};
+
 // ID dokumentů (_docId) ručně vybraných k exportu.
 const selectedIds = new Set();
 
@@ -102,7 +106,15 @@ async function loadProducts() {
   hideStatus();
   // doc.id si uložíme do _docId (potřebujeme ho pro update "prodáno").
   // Firestore Timestamp převedeme na ISO string, ať sedí s appkou i řazením.
-  allProducts = snap.docs.map((doc) => {
+  // products/_meta není produkt – jen data k popiskům aktualizací.
+  dashMeta = {};
+  const productDocs = snap.docs.filter((doc) => {
+    if (doc.id !== window.META_DOC_ID) return true;
+    dashMeta = doc.data() || {};
+    return false;
+  });
+  renderUpdateLabels();
+  allProducts = productDocs.map((doc) => {
     const d = doc.data() || {};
     d._docId = doc.id;
     if (d.created_at && typeof d.created_at.toDate === "function") d.created_at = d.created_at.toDate().toISOString();
@@ -254,6 +266,7 @@ function card(p, index) {
         <span>${window.icon("calendar")}${fmtDate(p.created_at)}</span>
       </div>
       ${note ? `<div class="prod-note">${window.icon("note")}<span>${escapeHtml(note)}</span></div>` : ""}
+      ${saleLine(p)}
       <div class="prod-actions">
         <button class="btn btn--ghost btn--sm edit-toggle">
           ${window.icon("pencil")} Upravit
@@ -283,7 +296,34 @@ function card(p, index) {
   el.querySelector(".sold-toggle").addEventListener("click", (e) => toggleSold(p, e.currentTarget));
   el.querySelector(".edit-toggle").addEventListener("click", () => openEdit(p));
   el.querySelector(".duplicate-toggle").addEventListener("click", () => openDuplicate(p));
+  const saleBtn = el.querySelector(".prod-sale");
+  if (saleBtn) saleBtn.addEventListener("click", () => openSales(p));
   return el;
+}
+
+// Řádek na kartě: za kolik a kdy se produkt naposled prodal (klik = graf).
+function saleLine(p) {
+  const all = window.salesOf(p);
+  if (!all.length) return "";
+  const last = window.lastRealSale(p);
+  const n = all.length;
+  // Letošní datum bez roku – na úzké kartě by se jinak zalamovalo.
+  const d = last && new Date(last.ended_at);
+  const when = !d || isNaN(d)
+    ? "–"
+    : d.getFullYear() === new Date().getFullYear()
+      ? d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })
+      : fmtDate(last.ended_at);
+  const text = last
+    ? `Prodáno <b>${escapeHtml(window.formatKc(last.price))}</b> · ${when}`
+    : `Neprodáno · v aukci ${n}×`;
+  return `
+    <button type="button" class="prod-sale${last ? "" : " is-unsold"}"
+            title="Historie cen" aria-label="Historie cen ${escapeHtml(p.product_id || "")}">
+      ${window.icon("chart")}<span class="prod-sale-text">${text}</span>${
+        last && n > 1 ? `<span class="prod-sale-n">${n}×</span>` : ""
+      }
+    </button>`;
 }
 
 /* --- Výběr produktů k exportu --- */
@@ -526,13 +566,11 @@ async function confirmBulkSold() {
 
   bulkSoldConfirm.classList.add("is-loading");
   try {
-    // Firestore batch = vše, nebo nic (po dávkách, limit je 500 zápisů).
     const col = window.db.collection("products");
-    for (let i = 0; i < items.length; i += 400) {
-      const batch = window.db.batch();
-      items.slice(i, i + 400).forEach((p) => batch.update(col.doc(p._docId), { sold: true, sold_at: soldAt }));
-      await batch.commit();
-    }
+    const ops = items.map((p) => ({ ref: col.doc(p._docId), data: { sold: true, sold_at: soldAt } }));
+    // Datum pro popisek „Hromadně prodané“.
+    ops.push({ ref: col.doc(window.META_DOC_ID), data: { sold_updated_at: soldAt }, merge: true });
+    await commitOps(ops);
   } catch (e) {
     bulkSoldConfirm.classList.remove("is-loading");
     bulkSoldSummary.classList.remove("is-hidden");
@@ -545,6 +583,8 @@ async function confirmBulkSold() {
     p.sold = true;
     p.sold_at = soldAt;
   });
+  dashMeta.sold_updated_at = soldAt;
+  renderUpdateLabels();
   closeBulkSold();
   updateStats();
   render();
@@ -556,6 +596,412 @@ async function confirmBulkSold() {
     skipped.length ? "warning" : "success",
     skipped.length ? 9000 : 6000
   );
+}
+
+// Zápis po dávkách (Firestore batch = vše, nebo nic; limit je 500 zápisů).
+// op = { ref, data, merge }: s merge se dokument vytvoří/doplní (set),
+// jinak se jen upraví existující (update).
+async function commitOps(ops) {
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = window.db.batch();
+    ops.slice(i, i + 400).forEach((op) => {
+      if (op.merge) batch.set(op.ref, op.data, { merge: true });
+      else batch.update(op.ref, op.data);
+    });
+    await batch.commit();
+  }
+}
+
+/* --- Popisky „kdy naposled“ (ceny prodejů, hromadně prodané) --- */
+function fmtDateTimeIso(iso) {
+  const d = new Date(iso);
+  return isNaN(d)
+    ? "–"
+    : d.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function renderUpdateLabels() {
+  [
+    ["upd-prices", dashMeta.prices_updated_at, "Poslední import cen prodejů"],
+    ["upd-sold", dashMeta.sold_updated_at, "Poslední hromadné označení prodaných"]
+  ].forEach(([id, iso, label]) => {
+    const pill = document.getElementById(id);
+    if (!pill) return;
+    pill.classList.toggle("is-on", !!iso);
+    document.getElementById(id + "-date").textContent = iso ? fmtDate(iso) : "zatím ne";
+    pill.title = iso ? `${label}: ${fmtDateTimeIso(iso)}` : `${label}: zatím neproběhl`;
+  });
+}
+
+/* ==========================================================
+   Ceny prodejů
+   Uživatel vloží skončené aukce zkopírované z Aukra. U každé se
+   najde produkt (ID za „|“), ukáže se náhled a po potvrzení se
+   k produktu uloží historie: číslo aukce, cena, konec, kupující.
+   Číslo aukce je klíč – opakovaný import stejné aukce nic nezdvojí.
+   ==========================================================*/
+const pricesModal = document.getElementById("prices-modal");
+const pricesInput = document.getElementById("prices-input");
+const pricesSummary = document.getElementById("prices-summary");
+const pricesList = document.getElementById("prices-list");
+const pricesConfirm = document.getElementById("prices-confirm");
+const pricesConfirmText = document.getElementById("prices-confirm-text");
+let pricesPlan = null; // { toSave: [{ p, merged, added }] }
+
+function productsByKey() {
+  const byKey = new Map();
+  allProducts.forEach((p) => {
+    const key = productIdKey(p);
+    if (key) byKey.set(key, p);
+  });
+  return byKey;
+}
+function fmtShortDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "–" : d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+}
+
+function openPrices() {
+  pricesInput.value = "";
+  renderPrices();
+  pricesModal.classList.add("is-active");
+  pricesInput.focus();
+}
+function closePrices() {
+  if (pricesConfirm.classList.contains("is-loading")) return; // právě se ukládá
+  pricesModal.classList.remove("is-active");
+  pricesPlan = null;
+}
+
+function renderPrices() {
+  // Stejná aukce vložená dvakrát se počítá jednou.
+  const seen = new Set();
+  const auctions = window.parseAukroSales(pricesInput.value).filter((a) => {
+    if (seen.has(a.auction)) return false;
+    seen.add(a.auction);
+    return true;
+  });
+  const byKey = productsByKey();
+  const groups = new Map();
+  auctions.forEach((a) => {
+    if (!groups.has(a.key)) groups.set(a.key, []);
+    groups.get(a.key).push(a);
+  });
+
+  const rows = Array.from(groups, ([key, list]) => {
+    const p = byKey.get(key);
+    if (!p) return { key, list, p: null, added: 0, status: "missing" };
+    const { merged, added } = window.mergeSales(p.sales, list);
+    return { key, list, p, merged, added, status: added ? "new" : "known" };
+  });
+  const toSave = rows.filter((r) => r.status === "new");
+  const addedTotal = toSave.reduce((s, r) => s + r.added, 0);
+  const knownTotal = rows.filter((r) => r.p).reduce((s, r) => s + r.list.length - r.added, 0);
+  const missingRows = rows.filter((r) => r.status === "missing");
+  const missingTotal = missingRows.reduce((s, r) => s + r.list.length, 0);
+  pricesPlan = { toSave, addedTotal };
+
+  // Souhrn
+  if (!auctions.length) {
+    pricesSummary.classList.toggle("is-hidden", !pricesInput.value.trim());
+    pricesSummary.textContent =
+      "V textu jsem nenašel žádnou aukci – každá potřebuje „| ID“, číslo aukce v závorce a řádek „Cena“.";
+  } else {
+    pricesSummary.classList.remove("is-hidden");
+    const parts = [
+      `Nalezeno ${window.pluralCz(auctions.length, "aukce", "aukce", "aukcí")} u ${window.pluralCz(groups.size, "produktu", "produktů", "produktů")}`,
+      `nové ${addedTotal}`
+    ];
+    if (knownTotal) parts.push(`už uložené ${knownTotal}`);
+    if (missingTotal) parts.push(`bez produktu v databázi ${missingTotal}`);
+    pricesSummary.textContent = parts.join(" · ");
+  }
+
+  // Seznam: nejdřív co se uloží, pak už uložené, nakonec nenalezené
+  const order = { new: 0, known: 1, missing: 2 };
+  const CLASS = { new: "mark", known: "already", missing: "missing" };
+  pricesList.innerHTML = "";
+  rows
+    .slice()
+    .sort((a, b) => order[a.status] - order[b.status])
+    .forEach((r) => {
+      const real = r.list.filter((a) => a.real);
+      const fake = r.list.length - real.length;
+      const lastReal = real.slice().sort((a, b) => String(b.ended_at).localeCompare(String(a.ended_at)))[0];
+      const meta = [window.pluralCz(r.list.length, "aukce", "aukce", "aukcí")];
+      if (lastReal) meta.push(`prodáno ${window.formatKc(lastReal.price)} (${fmtShortDate(lastReal.ended_at)})`);
+      if (fake) meta.push(`odkoupeno ${fake}×`);
+      if (!r.p) meta.push("ID není v databázi");
+
+      const li = document.createElement("li");
+      li.className = "bulk-item bulk-item--" + CLASS[r.status];
+      li.dataset.key = r.key;
+      const img = r.p && imagesOf(r.p)[0];
+      li.innerHTML = `
+        <span class="export-thumb">${img ? thumbImg(img, 96, "", 'loading="lazy" decoding="async"') : window.icon(r.p ? "image" : "x")}</span>
+        <span class="export-info">
+          <span class="export-name"><b>${escapeHtml(r.p ? r.p.product_id : r.key)}</b> ${escapeHtml(r.p ? displayName(r.p) : r.list[0].title)}</span>
+          <span class="export-meta">${escapeHtml(meta.join(" · "))}</span>
+        </span>
+        <span class="bulk-status">${
+          r.status === "new" ? window.icon("check") + "+" + r.added : r.status === "known" ? "už uloženo" : "není v DB"
+        }</span>
+      `;
+      pricesList.appendChild(li);
+    });
+
+  pricesConfirm.disabled = addedTotal === 0;
+  pricesConfirmText.textContent = addedTotal
+    ? `Uložit ceny (${addedTotal})`
+    : auctions.length && !missingTotal
+      ? "Vše už je uložené"
+      : "Uložit ceny";
+}
+
+async function confirmPrices() {
+  if (!window.db || !pricesPlan || !pricesPlan.toSave.length) return;
+  const rows = pricesPlan.toSave.slice();
+  const added = pricesPlan.addedTotal;
+  const now = new Date().toISOString();
+
+  pricesConfirm.classList.add("is-loading");
+  try {
+    const col = window.db.collection("products");
+    const ops = rows.map((r) => ({ ref: col.doc(r.p._docId), data: { sales: r.merged, sales_updated_at: now } }));
+    // Datum pro popisek „Ceny prodejů“.
+    ops.push({ ref: col.doc(window.META_DOC_ID), data: { prices_updated_at: now }, merge: true });
+    await commitOps(ops);
+  } catch (e) {
+    pricesConfirm.classList.remove("is-loading");
+    pricesSummary.classList.remove("is-hidden");
+    pricesSummary.textContent = "Uložení selhalo: " + (e.message || e);
+    return;
+  }
+  pricesConfirm.classList.remove("is-loading");
+
+  rows.forEach((r) => {
+    r.p.sales = r.merged;
+    r.p.sales_updated_at = now;
+  });
+  dashMeta.prices_updated_at = now;
+  renderUpdateLabels();
+  closePrices();
+  render();
+  showStatus(
+    `Uloženo ${window.pluralCz(added, "aukce", "aukce", "aukcí")} u ${window.pluralCz(rows.length, "produktu", "produktů", "produktů")}.`,
+    "success",
+    5000
+  );
+}
+
+/* ==========================================================
+   Historie cen jednoho produktu
+   Nahoře poslední skutečný prodej, pod ním graf (osa x = konec
+   aukce, osa y = cena) a seznam všech aukcí jako textová podoba
+   grafu. Plné body = prodáno, duté = odkoupeno (Aledas / Ebisu).
+   ==========================================================*/
+const salesModal = document.getElementById("sales-modal");
+const salesChart = document.getElementById("sales-chart");
+let salesProduct = null;
+
+function openSales(p) {
+  salesProduct = p;
+  const sales = window.salesOf(p);
+  const last = window.lastRealSale(p);
+  const fake = sales.filter((s) => s.real === false).length;
+
+  document.getElementById("sales-title").textContent = `Historie cen · ${p.product_id || ""}`;
+  document.getElementById("sales-name").textContent = displayName(p);
+
+  const hero = document.getElementById("sales-hero");
+  hero.innerHTML = last
+    ? `<span class="sales-hero-label">Naposled prodáno za</span>
+       <span class="sales-hero-num">${escapeHtml(window.formatKc(last.price))}</span>
+       <span class="sales-hero-meta">${fmtDate(last.ended_at)}${last.buyer ? " · " + escapeHtml(last.buyer) : ""}${last.buy_now ? " · Kup teď" : ""}</span>`
+    : `<span class="sales-hero-label">Zatím neprodáno</span>
+       <span class="sales-hero-meta">V aukci ${sales.length}×${fake ? " – pokaždé odkoupeno (Aledas / Ebisu)" : ""}</span>`;
+
+  // Seznam aukcí, nejnovější nahoře
+  const list = document.getElementById("sales-list");
+  list.innerHTML = "";
+  const nameKey = displayName(p).trim().toLowerCase();
+  sales
+    .slice()
+    .sort((a, b) => String(b.ended_at || "").localeCompare(String(a.ended_at || "")))
+    .forEach((s) => {
+      const li = document.createElement("li");
+      const real = s.real !== false;
+      li.className = "sales-row" + (real ? "" : " is-fake");
+      const d = s.ended_at ? new Date(s.ended_at) : null;
+      const title = s.title && s.title.trim().toLowerCase() !== nameKey ? s.title : "";
+      li.innerHTML = `
+        <span class="sales-row-date">${d ? fmtDate(s.ended_at) : "–"}<small>${d ? fmtTime(d) : ""}</small></span>
+        <span class="sales-row-info">
+          <b>${escapeHtml(window.formatKc(s.price))}</b>
+          <small>${escapeHtml([s.buyer, title, "aukce " + s.auction].filter(Boolean).join(" · "))}</small>
+        </span>
+        <span class="bulk-status">${real ? (s.buy_now ? "kup teď" : "prodáno") : "odkoupeno"}</span>
+      `;
+      list.appendChild(li);
+    });
+
+  salesModal.classList.add("is-active");
+  salesModal.querySelector(".modal-content").scrollTop = 0;
+  drawSalesChart(salesChart, sales);
+}
+function closeSales() {
+  salesModal.classList.remove("is-active");
+  salesProduct = null;
+}
+
+// Hezké dělení osy y: krok 1 / 2 / 5 × 10^n, zhruba 4 dílky.
+function niceScale(maxValue) {
+  const v = Math.max(1, maxValue);
+  const raw = v / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = Math.max(1, (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag);
+  // Rezerva nahoře pro popisek hodnoty nad nejvyšším bodem.
+  return { step, max: Math.ceil((v * 1.12) / step) * step };
+}
+
+function drawSalesChart(fig, sales) {
+  const SVG = "http://www.w3.org/2000/svg";
+  const pts = sales
+    .filter((s) => s.ended_at && s.price != null && !isNaN(new Date(s.ended_at)))
+    .map((s) => ({ s, t: new Date(s.ended_at).getTime(), v: Number(s.price), real: s.real !== false }))
+    .sort((a, b) => a.t - b.t);
+  fig.innerHTML = "";
+  // Jedna aukce = jedno číslo; to říká přehled nahoře i seznam, graf by nic nepřidal.
+  fig.classList.toggle("is-hidden", pts.length < 2);
+  if (pts.length < 2) return;
+
+  const W = Math.max(260, Math.round(fig.clientWidth || 480));
+  const H = 220;
+  const m = { l: 46, r: 16, t: 26, b: 30 };
+  const iw = W - m.l - m.r;
+  const ih = H - m.t - m.b;
+  const DAY = 864e5;
+  let t0 = pts[0].t;
+  let t1 = pts[pts.length - 1].t;
+  if (t1 - t0 < DAY) { t0 -= 3 * DAY; t1 += 3 * DAY; }
+  const pad = (t1 - t0) * 0.07;
+  t0 -= pad;
+  t1 += pad;
+  const { step, max: yMax } = niceScale(Math.max.apply(null, pts.map((p) => p.v)));
+  const x = (t) => m.l + ((t - t0) / (t1 - t0)) * iw;
+  const y = (v) => m.t + ih - (v / yMax) * ih;
+  pts.forEach((p) => { p.x = x(p.t); p.y = y(p.v); });
+
+  const el = (name, attrs, text) => {
+    const n = document.createElementNS(SVG, name);
+    Object.keys(attrs || {}).forEach((k) => n.setAttribute(k, attrs[k]));
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const svg = el("svg", {
+    class: "sales-svg", width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+    role: "img", "aria-label": `Graf cen ${pts.length} aukcí, osa x datum konce, osa y cena v Kč`
+  });
+
+  // Mřížka + popisky osy y (tlumeně, ať nepřebíjí data)
+  const grid = el("g", { class: "sales-grid" });
+  for (let v = 0; v <= yMax; v += step) {
+    grid.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
+    grid.appendChild(el("text", { x: m.l - 8, y: y(v), "text-anchor": "end", "dominant-baseline": "middle" },
+      v.toLocaleString("cs-CZ")));
+  }
+  grid.appendChild(el("text", { x: m.l - 8, y: m.t - 14, "text-anchor": "end", class: "sales-unit" }, "Kč"));
+  svg.appendChild(grid);
+
+  // Popisky osy x: datum u bodů, jen pokud se nepřekrývají (poslední má přednost).
+  const spansYears = new Date(pts[0].t).getFullYear() !== new Date(pts[pts.length - 1].t).getFullYear();
+  const fmtX = (t) =>
+    new Date(t).toLocaleDateString("cs-CZ", spansYears
+      ? { day: "numeric", month: "numeric", year: "2-digit" }
+      : { day: "numeric", month: "numeric" });
+  const placed = [];
+  const MIN_GAP = spansYears ? 70 : 52;
+  pts.forEach((p, i) => {
+    if (placed.length && p.x - placed[placed.length - 1].x < MIN_GAP) {
+      if (i !== pts.length - 1) return;
+      placed.pop();
+    }
+    placed.push(p);
+  });
+  const xAxis = el("g", { class: "sales-xaxis" });
+  placed.forEach((p) => {
+    xAxis.appendChild(el("text", { x: Math.min(W - m.r - 18, Math.max(m.l + 18, p.x)), y: H - 8, "text-anchor": "middle" }, fmtX(p.t)));
+  });
+  svg.appendChild(xAxis);
+
+  // Spojnice v čase (2 px) – jak dopadla každá další aukce
+  svg.appendChild(el("polyline", { class: "sales-line", points: pts.map((p) => `${p.x},${p.y}`).join(" ") }));
+
+  // Body: plný = prodáno, dutý = odkoupeno
+  const dots = el("g");
+  pts.forEach((p) => {
+    p.dot = el("circle", { class: "sales-dot" + (p.real ? "" : " is-fake"), cx: p.x, cy: p.y, r: p.real ? 5 : 4.5 });
+    dots.appendChild(p.dot);
+  });
+  svg.appendChild(dots);
+
+  // Hodnoty jen u posledního a nejvyššího bodu (ne u každého)
+  const lastP = pts[pts.length - 1];
+  const maxP = pts.reduce((a, b) => (b.v > a.v ? b : a));
+  const labelled = maxP === lastP ? [lastP] : [maxP, lastP];
+  labelled.forEach((p) => {
+    const tx = Math.min(W - m.r - 4, Math.max(m.l + 4, p.x));
+    const anchor = tx > W - m.r - 30 ? "end" : tx < m.l + 30 ? "start" : "middle";
+    svg.appendChild(el("text", { class: "sales-value", x: tx, y: p.y - 12, "text-anchor": anchor }, window.formatKc(p.v)));
+  });
+
+  // Zóny pro najetí / klávesnici (větší než bod) + bublina s detailem
+  const tip = document.createElement("div");
+  tip.className = "sales-tip is-hidden";
+  tip.setAttribute("role", "status");
+  const hits = el("g", { class: "sales-hits" });
+  const show = (p) => {
+    pts.forEach((q) => q.dot.classList.toggle("is-active", q === p));
+    const s = p.s;
+    tip.innerHTML = `<b>${escapeHtml(window.formatKc(s.price))}</b>
+      <span>${fmtDate(s.ended_at)} ${fmtTime(new Date(s.ended_at))}</span>
+      <span>${escapeHtml(s.buyer || "—")} · ${p.real ? (s.buy_now ? "kup teď" : "prodáno") : "odkoupeno"}</span>`;
+    tip.classList.remove("is-hidden");
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.min(W - tw - 2, Math.max(2, p.x - tw / 2)) + "px";
+    tip.style.top = Math.max(0, p.y - tip.offsetHeight - 14) + "px";
+  };
+  const hide = () => {
+    tip.classList.add("is-hidden");
+    pts.forEach((q) => q.dot.classList.remove("is-active"));
+  };
+  pts.forEach((p) => {
+    const s = p.s;
+    const hit = el("circle", {
+      cx: p.x, cy: p.y, r: 16, tabindex: 0, focusable: "true",
+      "aria-label": `${fmtDate(s.ended_at)}: ${window.formatKc(s.price)}, ${p.real ? "prodáno" : "odkoupeno"}${s.buyer ? " (" + s.buyer + ")" : ""}`
+    });
+    hit.addEventListener("pointerenter", () => show(p));
+    hit.addEventListener("pointerleave", hide);
+    hit.addEventListener("focus", () => show(p));
+    hit.addEventListener("blur", hide);
+    hit.addEventListener("click", () => show(p)); // dotyk na mobilu
+    hits.appendChild(hit);
+  });
+  svg.appendChild(hits);
+
+  fig.appendChild(svg);
+  fig.appendChild(tip);
+
+  // Legenda jen když jsou v grafu oba druhy bodů
+  if (pts.some((p) => p.real) && pts.some((p) => !p.real)) {
+    const cap = document.createElement("figcaption");
+    cap.className = "sales-legend";
+    cap.innerHTML =
+      '<span><i class="lg-dot"></i>prodáno</span>' +
+      '<span><i class="lg-dot is-fake"></i>odkoupeno (Aledas / Ebisu)</span>';
+    fig.appendChild(cap);
+  }
 }
 
 /* ==========================================================
@@ -1469,6 +1915,23 @@ bulkSoldConfirm.addEventListener("click", confirmBulkSold);
 document.getElementById("bulk-sold-cancel").addEventListener("click", closeBulkSold);
 bulkSoldModal.querySelector(".modal-background").addEventListener("click", closeBulkSold);
 
+/* --- Události cen prodejů a historie cen --- */
+document.getElementById("prices-btn").addEventListener("click", openPrices);
+pricesInput.addEventListener("input", renderPrices);
+pricesConfirm.addEventListener("click", confirmPrices);
+document.getElementById("prices-cancel").addEventListener("click", closePrices);
+pricesModal.querySelector(".modal-background").addEventListener("click", closePrices);
+document.getElementById("sales-close").addEventListener("click", closeSales);
+salesModal.querySelector(".modal-background").addEventListener("click", closeSales);
+// Graf se kreslí na šířku okna – při otočení telefonu / změně okna znovu.
+let salesResizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(salesResizeTimer);
+  salesResizeTimer = setTimeout(() => {
+    if (salesProduct) drawSalesChart(salesChart, window.salesOf(salesProduct));
+  }, 120);
+});
+
 /* --- Události kontroly exportu --- */
 exportStartInput.addEventListener("input", renderExportReview);
 exportConfirmBtn.addEventListener("click", confirmExport);
@@ -1535,6 +1998,8 @@ document.addEventListener("keydown", (e) => {
   closePhotos();
   closeExportReview();
   closeBulkSold();
+  closePrices();
+  closeSales();
 });
 
 /* --- Start (až po přihlášení vlastníka) --- */

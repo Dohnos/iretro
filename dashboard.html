@@ -50,6 +50,9 @@
       <button id="bulk-sold-btn" class="btn btn--ghost" title="Vlož názvy prodaných aukcí a označ je najednou">
         <i data-icon="check-square"></i> Hromadně prodané
       </button>
+      <button id="prices-btn" class="btn btn--ghost" title="Vlož skončené aukce z Aukra a ulož, za kolik se co prodalo">
+        <i data-icon="coins"></i> Ceny prodejů
+      </button>
       <button id="export-btn" class="btn btn--ghost" title="Vyexportuje všechny neprodané produkty">
         <i data-icon="download"></i> Export všech neprodaných
       </button>
@@ -77,6 +80,16 @@
         <span class="stat-num" id="stat-last">–</span>
       </div>
     </section>
+
+    <!-- Kdy se naposled nahrály ceny prodejů a hromadně prodané (products/_meta) -->
+    <div class="dash-updates" aria-label="Poslední aktualizace">
+      <span class="update-pill" id="upd-prices" title="Poslední import cen prodejů">
+        <span class="update-dot"></span>Ceny prodejů <b id="upd-prices-date">–</b>
+      </span>
+      <span class="update-pill" id="upd-sold" title="Poslední hromadné označení prodaných">
+        <span class="update-dot"></span>Hromadně prodané <b id="upd-sold-date">–</b>
+      </span>
+    </div>
 
     <!-- Hledání + filtr + výběr -->
     <div class="dash-toolbar">
@@ -157,6 +170,60 @@
             <button type="button" id="bulk-sold-confirm" class="btn" disabled>
               <i data-icon="check"></i> <span id="bulk-sold-confirm-text">Označit prodané</span>
             </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ceny prodejů: vložený text skončených aukcí → náhled → zápis historie cen -->
+  <div id="prices-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content bulk-sold-content">
+      <div class="box">
+        <p class="modal-title">Ceny prodejů</p>
+        <p class="modal-text">
+          Vlož skončené aukce zkopírované z Aukra (stejně jako u hromadně prodaných).
+          Ke každému produktu se uloží cena, datum a kupující. Aukce, které
+          „vyhrál“ Aledas nebo Ebisu, se uloží jen jako odkoupené – do cen se nepočítají.
+        </p>
+
+        <div class="field">
+          <label for="prices-input" class="label">Skončené aukce</label>
+          <textarea id="prices-input" class="textarea" rows="7" spellcheck="false"
+                    placeholder="PRIM KROUŽEK NÁDHERNÉ | RA86&#10;(7140052063)&#10;skončeno (ne 8. listopadu 2026, 20:00:00)&#10;Kupující:&#10;lubomir87&#10;Cena	1 189 Kč"></textarea>
+        </div>
+
+        <div id="prices-summary" class="bulk-summary is-hidden" aria-live="polite"></div>
+        <ol id="prices-list" class="bulk-list"></ol>
+
+        <div class="edit-modal-buttons">
+          <span></span>
+          <span class="edit-modal-buttons-right">
+            <button type="button" id="prices-cancel" class="btn btn--ghost">Zrušit</button>
+            <button type="button" id="prices-confirm" class="btn" disabled>
+              <i data-icon="check"></i> <span id="prices-confirm-text">Uložit ceny</span>
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historie cen jednoho produktu: graf + seznam aukcí -->
+  <div id="sales-modal" class="modal">
+    <div class="modal-background"></div>
+    <div class="modal-content sales-modal-content">
+      <div class="box">
+        <p class="modal-title" id="sales-title">Historie cen</p>
+        <p class="modal-text" id="sales-name"></p>
+        <div id="sales-hero" class="sales-hero"></div>
+        <figure id="sales-chart" class="sales-chart"></figure>
+        <ol id="sales-list" class="sales-list" aria-label="Aukce produktu"></ol>
+        <div class="edit-modal-buttons">
+          <span></span>
+          <span class="edit-modal-buttons-right">
+            <button type="button" id="sales-close" class="btn btn--ghost">Zavřít</button>
           </span>
         </div>
       </div>
@@ -370,6 +437,7 @@
   <script src="description.js"></script>
   <script src="photos.js"></script>
   <script src="export.js"></script>
+  <script src="sales.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

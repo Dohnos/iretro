@@ -391,6 +391,15 @@ async function loadLastProductId() {
     if (window.db) {
       const snap = await window.db.collection("products").get();
       let bestNum = -1;
+      // Produkty s historií prodejů – z nich se našeptává cena.
+      priceRefProducts = [];
+      snap.forEach((doc) => {
+        const data = doc.data() || {};
+        if (doc.id !== window.META_DOC_ID && Array.isArray(data.sales) && data.sales.length) {
+          priceRefProducts.push(data);
+        }
+      });
+      updatePriceHint();
       snap.forEach((doc) => {
         const pid = (doc.data() || {}).product_id;
         const p = parseProductId(pid);
@@ -453,6 +462,53 @@ async function checkStartIdFree(parsed) {
 
 // Spustíme až po přihlášení vlastníka (data jsou za Firebase Auth).
 window.onAuthReady(loadLastProductId);
+
+/* ---------------------------------
+   Návrh ceny podle prodaných podobných předmětů
+   (stejný autor / výrobce, podobný název, kategorie).
+   Ceny pocházejí z importu „Ceny prodejů“ v dashboardu;
+   odkoupené (Aledas / Ebisu) se nepočítají. Klik = vyplní cenu.
+-----------------------------------*/
+let priceRefProducts = [];
+const priceHintElem = document.getElementById("price-hint");
+
+function updatePriceHint() {
+  if (!priceHintElem) return;
+  const name = document.getElementById("product-name").value.trim();
+  const hint = name ? window.suggestPrice(name, categoryIdInput.value.trim(), priceRefProducts) : null;
+  priceHintElem.innerHTML = "";
+  priceHintElem.classList.toggle("is-hidden", !hint);
+  if (!hint) return;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "price-hint-chip";
+  btn.innerHTML = window.icon("coins") + "<span></span>";
+  btn.querySelector("span").textContent = "≈ " + window.formatKc(hint.price);
+  btn.title = "Podobné prodané:\n" + hint.matches
+    .map((x) => `${x.product.product_id || ""} ${String(x.product.name || "").replace(/\s*\|\s*\w+\s*$/, "")} – ${window.formatKc(x.sale.price)}`)
+    .join("\n");
+  btn.setAttribute("aria-label", `Použít navrženou cenu ${hint.price} Kč`);
+  btn.addEventListener("click", () => {
+    const input = document.getElementById("product-price");
+    input.value = hint.price;
+    clearFieldError("product-price");
+    renderInputHistory("product-price");
+  });
+
+  const text = document.createElement("span");
+  text.className = "price-hint-text";
+  const first = hint.matches[0];
+  text.textContent = hint.count === 1
+    ? `jako ${first.product.product_id || "podobný"} (${new Date(first.sale.ended_at).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })})`
+    : hint.min === hint.max
+      ? `${hint.count} podobné za ${window.formatKc(hint.min)}`
+      : `${hint.count} podobné · ${hint.min.toLocaleString("cs-CZ")}–${window.formatKc(hint.max)}`;
+
+  priceHintElem.appendChild(btn);
+  priceHintElem.appendChild(text);
+}
+document.getElementById("product-name").addEventListener("input", updatePriceHint);
 
 /* ---------------------------------
    Fotky (focení i výběr z galerie)
@@ -781,6 +837,7 @@ function updateCategoryList(query) {
           categoryBtnText.querySelector('span span').textContent = cat.name;
           updateStatus('Kategorie vybrána.', "success");
           closeModal(categoryModal);
+          updatePriceHint(); // stejná kategorie zpřesní návrh ceny
         };
         categoryList.appendChild(btn);
       });
@@ -980,6 +1037,7 @@ function resetProductForm() {
   progressBar.value = 0;
   progressBar.classList.add("is-hidden");
   ["product-name", "product-price", "category-id", "shippingMethod"].forEach(clearFieldError);
+  updatePriceHint();
 }
 
 /* ---------------------------------
