@@ -112,19 +112,22 @@ ID produktů se chovají stejně jako při focení – navazují na nejvyšší 
 ID a nejde je použít podruhé.
 
 ## 📝 Poznámka k předmětu
-V kroku **Detaily** se poznámka vybírá ze tří variant (poslední volba se
+V kroku **Detaily** se poznámka vybírá ze čtyř variant (poslední volba se
 pamatuje pro další produkty):
 
 | Varianta | Co se doplní | Text v popisu nabídky |
 |---|---|---|
 | **Rozměr** | jen dvě čísla | `Tento předmět má rozměr 5 x 5 cm.` |
 | **Rozměr a poznámka** | dvě čísla + text za dvojtečkou | `Tento předmět má rozměr: 5 x 5 cm.`<br>`Poznámka k předmětu: tento předmět je velmi zachovalý.` |
+| **Jen poznámka** | jen text za dvojtečkou | `Poznámka k předmětu: tento předmět je velmi zachovalý.` |
 | **Bez poznámky** | nic | sekce poznámky v popisu není vůbec |
 
 „x“ a „cm.“ jsou pevné, desetinná tečka se převede na čárku (5.5 → 5,5)
 a za text poznámky se doplní tečka, pokud chybí. Pod poli je živý náhled
 přesně toho, co půjde do popisu. Poznámka se vloží do popisu nabídky jako
-**první sekce** (pod logo, nad „Nabízené zboží“). Šablona popisu je
+**první sekce** (pod logo, nad „Nabízené zboží“). Popisky „Tento předmět má
+rozměr“ a „Poznámka k předmětu:“ jsou v popisu **tučně** (text za nimi normálně)
+a mezi rozměrem a poznámkou je jeden prázdný řádek. Šablona popisu je
 v souboru **`description.js`** – sdílí ji appka i dashboard.
 
 Poznámka jde změnit i později v dashboardu (**Upravit**, volný text).

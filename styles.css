@@ -677,7 +677,7 @@ code {
    -------------------------------------------------------------------------- */
 .seg-switch {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   padding: 3px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);

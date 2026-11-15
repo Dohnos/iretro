@@ -34,10 +34,28 @@
       .replace(/"/g, "&quot;");
   }
 
+  // Popisky ze šablon appky: tučně se vypíše popisek (včetně dvojtečky),
+  // text za ním zůstane normální.
+  const NOTE_LABELS = [/^(Tento předmět má rozměr:?)/, /^(Poznámka k předmětu:)/];
+
   // Poznámka je prostý text od uživatele: escapujeme ho a konce řádků
-  // převedeme na <br>, aby víceřádková poznámka držela tvar.
+  // převedeme na <br>, aby víceřádková poznámka držela tvar. Před řádek
+  // začínající popiskem („Poznámka k předmětu:“) přidáme jeden prázdný
+  // řádek, ať je rozměr a poznámka od sebe opticky oddělený.
   function noteSection(note) {
-    const html = escapeHtml(note.trim()).replace(/\r?\n/g, "<br>");
+    let html = "";
+    note.trim().split(/\r?\n/).forEach((line, i) => {
+      let part = escapeHtml(line);
+      let labelled = false;
+      NOTE_LABELS.forEach((re) => {
+        if (!labelled && re.test(part)) {
+          part = part.replace(re, "<strong>$1</strong>");
+          labelled = true;
+        }
+      });
+      if (i > 0) html += labelled ? "<br><br>" : "<br>";
+      html += part;
+    });
     return (
       heading("📝 POZNÁMKA K PŘEDMĚTU", true) +
       `<div style="${BOX_STYLE}"><p style="margin:0;">${html}</p></div>`

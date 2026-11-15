@@ -673,11 +673,14 @@ galleryInput.addEventListener("change", async () => {
 });
 
 /* ---------------------------------
-   Poznámka k předmětu – tři šablony
+   Poznámka k předmětu – čtyři šablony
    - Rozměr:            „Tento předmět má rozměr 5 x 5 cm.“
    - Rozměr a poznámka: „Tento předmět má rozměr: 5 x 5 cm.“
                         „Poznámka k předmětu: …“ (na dalším řádku)
+   - Jen poznámka:      „Poznámka k předmětu: …“
    - Bez poznámky:      v popisu nabídky žádná sekce poznámky
+   V popisu pro Aukro jsou popisky tučně a mezi rozměrem a poznámkou
+   je prázdný řádek (description.js).
    Uživatel doplní jen čísla (x a cm jsou pevné) a text za dvojtečkou.
    Zvolená varianta se pamatuje pro další produkty.
 -----------------------------------*/
@@ -722,6 +725,14 @@ function buildNoteFromForm(lenient = false) {
   }
 
   const free = asSentence(noteTextInput.value);
+
+  // Jen poznámka – bez rozměru (chyby rozměru se nehlásí).
+  if (mode === "note") {
+    const noteErrors = [];
+    if (!lenient && !free) noteErrors.push({ input: noteTextInput, message: "Doplň poznámku, nebo zvol „Bez poznámky“." });
+    return { text: `Poznámka k předmětu: ${free || "…"}`, errors: noteErrors };
+  }
+
   if (!lenient && !free) errors.push({ input: noteTextInput, message: "Doplň poznámku, nebo zvol jen „Rozměr“." });
   return {
     text: `Tento předmět má rozměr: ${show(a)} x ${show(b)} cm.\nPoznámka k předmětu: ${free || "…"}`,
@@ -750,8 +761,8 @@ function updateNotePreview() {
 
 function applyNoteModeUI() {
   const mode = getNoteMode();
-  noteSizeRow.classList.toggle("is-hidden", mode === "none");
-  noteTextRow.classList.toggle("is-hidden", mode !== "size-note");
+  noteSizeRow.classList.toggle("is-hidden", mode === "none" || mode === "note");
+  noteTextRow.classList.toggle("is-hidden", mode !== "size-note" && mode !== "note");
   noteSizePrefix.textContent = mode === "size-note" ? "Tento předmět má rozměr:" : "Tento předmět má rozměr";
   showNoteErrors({ errors: [] });
   updateNotePreview();
@@ -776,7 +787,8 @@ noteModeRadios.forEach((r) =>
     }
     applyNoteModeUI();
     // Po výběru varianty rovnou do prvního pole, ať se dá hned psát.
-    if (getNoteMode() !== "none") noteSizeA.focus();
+    if (getNoteMode() === "note") noteTextInput.focus();
+    else if (getNoteMode() !== "none") noteSizeA.focus();
   })
 );
 [noteSizeA, noteSizeB, noteTextInput].forEach((el) =>
