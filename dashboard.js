@@ -18,6 +18,7 @@ const DEFAULT_SHIPPING_ID = "2438895";
 const container = document.getElementById("products-container");
 const searchInput = document.getElementById("search");
 const hideSoldInput = document.getElementById("hide-sold");
+const onlySoldInput = document.getElementById("only-sold");
 const statusMsg = document.getElementById("status-msg");
 const refreshBtn = document.getElementById("refresh-btn");
 const exportBtn = document.getElementById("export-btn");
@@ -161,8 +162,10 @@ function updateStats() {
 function visibleProducts() {
   const q = searchInput.value.trim().toLowerCase();
   const hideSold = hideSoldInput.checked;
+  const onlySold = onlySoldInput.checked;
   return allProducts.filter((p) => {
     if (hideSold && p.sold) return false;
+    if (onlySold && !p.sold) return false;
     if (!q) return true;
     return [p.product_id, p.name, p.location, noteOf(p)].some(
       (v) => v && String(v).toLowerCase().includes(q)
@@ -1443,7 +1446,15 @@ function closePhotos() {
 
 /* --- Události --- */
 searchInput.addEventListener("input", render);
-hideSoldInput.addEventListener("change", render);
+// „Skrýt prodané“ a „Jen prodané“ se vylučují – zapnutí jednoho vypne druhý.
+hideSoldInput.addEventListener("change", () => {
+  if (hideSoldInput.checked) onlySoldInput.checked = false;
+  render();
+});
+onlySoldInput.addEventListener("change", () => {
+  if (onlySoldInput.checked) hideSoldInput.checked = false;
+  render();
+});
 refreshBtn.addEventListener("click", loadProducts);
 exportBtn.addEventListener("click", exportAll);
 exportSelectedBtn.addEventListener("click", exportSelected);
