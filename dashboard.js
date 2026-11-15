@@ -1375,8 +1375,10 @@ function renderExportReview() {
       chip.className = "promo-chip";
       chip.dataset.promo = pr.key;
       chip.setAttribute("aria-pressed", on ? "true" : "false");
+      // Jen ikona; co dělá, říká title (najetí myší) a aria-label (čtečky).
       chip.title = (on ? "Zrušit: " : "Zapnout: ") + pr.label;
-      chip.innerHTML = window.icon(pr.icon) + `<span>${pr.short}</span>`;
+      chip.setAttribute("aria-label", pr.label);
+      chip.innerHTML = window.icon(pr.icon);
       chip.addEventListener("click", () => toggleExportPromo(p, pr, chip));
       promosBox.appendChild(chip);
     });

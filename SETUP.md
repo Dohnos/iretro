@@ -170,8 +170,9 @@ Oba exporty – soubor poslaný přes WhatsApp i stažení z dashboardu – jsou
   a upravený řádek krátce blikne.
 - **Topování:** souhrn ukazuje, kolik produktů má přednostní výpis, tučný
   titulek a zvýraznění (a kolik je bez topování). Topované produkty mají
-  v seznamu vlevo výraznou linku. Pod každým produktem jsou přepínače
-  **Přednostní / Tučný / Zvýraznění** – klepnutím topování zapneš nebo
+  v seznamu vlevo výraznou linku. Pod každým produktem jsou tři kulaté
+  přepínače s ikonami – hvězda (přednostní výpis), **B** (tučný titulek)
+  a zvýrazňovač (zvýraznění); klepnutím topování zapneš nebo
   odebereš; uloží se hned do databáze a promítne se do staženého CSV.
 - **WhatsApp z appky** bere jako začátek nejbližší celou hodinu (čas je
   vidět v potvrzovacím dialogu), dál po 2 minutách.

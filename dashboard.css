@@ -869,12 +869,14 @@
   gap: 6px;
   padding: 0 12px 10px 98px; /* 12 + číslo 26 + 10 + fotka 40 + 10 */
 }
+/* Přepínač topování = kulaté tlačítko jen s ikonou. */
 .promo-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 0 10px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: transparent;
@@ -886,8 +888,8 @@
     border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
 }
 .promo-chip .icon {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 .promo-chip:hover {
   border-color: var(--fg);
@@ -1054,10 +1056,6 @@
   }
 }
 @media (max-width: 480px) {
-  /* Na telefonu přepínače topování přes celou šířku řádku. */
-  .export-promos {
-    padding-left: 12px;
-  }
   /* Lišta akcí v úpravě zůstane v jedné řadě: u Smazat jen koš. */
   #edit-delete-btn .btn-label {
     display: none;
