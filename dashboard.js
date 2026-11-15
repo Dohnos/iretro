@@ -108,15 +108,7 @@ async function loadProducts() {
     if (d.sold_at && typeof d.sold_at.toDate === "function") d.sold_at = d.sold_at.toDate().toISOString();
     return d;
   });
-  // Řazení: nejnovější nahoře; při shodném čase (hromadný import) podle čísla ID sestupně
-  const numOf = (pid) => {
-    const m = /^([A-Za-z]+)(\d+)$/.exec(pid || "");
-    return m ? parseInt(m[2], 10) : -1;
-  };
-  allProducts.sort((a, b) => {
-    const t = String(b.created_at || "").localeCompare(String(a.created_at || ""));
-    return t !== 0 ? t : numOf(b.product_id) - numOf(a.product_id);
-  });
+  sortProducts();
 
   // Ve výběru necháme jen produkty, které v databázi pořád jsou.
   const known = new Set(allProducts.map((p) => p._docId));
@@ -125,6 +117,18 @@ async function loadProducts() {
   updateStats();
   animateNextRender = true;
   render();
+}
+
+// Řazení: nejnovější nahoře; při shodném čase (hromadný import) podle čísla ID sestupně
+function sortProducts() {
+  const numOf = (pid) => {
+    const m = /^([A-Za-z]+)(\d+)$/.exec(pid || "");
+    return m ? parseInt(m[2], 10) : -1;
+  };
+  allProducts.sort((a, b) => {
+    const t = String(b.created_at || "").localeCompare(String(a.created_at || ""));
+    return t !== 0 ? t : numOf(b.product_id) - numOf(a.product_id);
+  });
 }
 
 /* --- Statistiky --- */
@@ -254,6 +258,10 @@ function card(p, index) {
         <button class="btn btn--sm sold-toggle ${p.sold ? "btn--ghost" : ""}">
           ${p.sold ? window.icon("undo") + " Vrátit" : window.icon("check") + " Prodáno"}
         </button>
+        <button class="btn btn--ghost btn--sm btn--icon duplicate-toggle"
+                title="Duplikovat" aria-label="Duplikovat ${escapeHtml(p.product_id || "produkt")}">
+          ${window.icon("copy")}
+        </button>
       </div>
     </div>
   `;
@@ -271,6 +279,7 @@ function card(p, index) {
   });
   el.querySelector(".sold-toggle").addEventListener("click", (e) => toggleSold(p, e.currentTarget));
   el.querySelector(".edit-toggle").addEventListener("click", () => openEdit(p));
+  el.querySelector(".duplicate-toggle").addEventListener("click", () => openDuplicate(p));
   return el;
 }
 
@@ -762,9 +771,23 @@ function setEditBusy(busy, message) {
   editProgressElem.classList.toggle("is-hidden", !message);
 }
 
-function openEdit(p) {
+// Okno Upravit má dva režimy: "edit" (úprava uloženého produktu)
+// a "duplicate" (nový produkt podle vzoru, uloží se pod novým ID).
+let editMode = "edit";
+
+function openEdit(p, mode = "edit") {
+  editMode = mode;
   editingProduct = p;
   editPhotos = imagesOf(p).map((url) => ({ url }));
+
+  const dup = mode === "duplicate";
+  document.getElementById("edit-title").textContent = dup ? "Duplikovat produkt" : "Upravit produkt";
+  document.getElementById("edit-id-label").textContent = dup ? "Nové ID" : "ID";
+  document.getElementById("edit-id-hint").textContent = dup
+    ? `přidělené automaticky (další volné) · kopie z ${p._source ? p._source.product_id : "—"}`
+    : "nedá se měnit, je to klíč v databázi";
+  document.getElementById("edit-save-text").textContent = dup ? "Vytvořit kopii" : "Uložit";
+  editDeleteBtn.classList.toggle("is-hidden", dup);
 
   document.getElementById("edit-product-id").textContent = p.product_id || "—";
   editNameInput.value = p.name || "";
@@ -807,6 +830,7 @@ function closeEdit() {
   if (editSaving) return; // nahrávání/ukládání nejde přerušit zavřením
   editModal.classList.remove("is-active");
   editingProduct = null;
+  editMode = "edit";
   revokePreviews(editPhotos);
   editPhotos = [];
 }
@@ -914,6 +938,11 @@ async function saveEdit() {
   }
   patch.raw = Object.assign({}, p.raw || {}, rawPatch);
 
+  if (editMode === "duplicate") {
+    await saveDuplicate(p, patch, uploaded);
+    return;
+  }
+
   try {
     await window.db.collection("products").doc(p._docId).update(patch);
   } catch (e) {
@@ -945,6 +974,118 @@ function showEditError(message, field) {
   const target = field || editErrorElem;
   target.scrollIntoView({ block: "center", behavior: "smooth" });
   if (field) field.focus({ preventScroll: true });
+}
+
+/* ==========================================================
+   Duplikace produktu
+   Kopie dostane další volné ID se stejným prefixem (po nejvyšším
+   v databázi – stejně jako v appce, takže se ID nikdy nepoužije
+   dvakrát). Otevře se v okně Upravit, kde jde před uložením změnit
+   název, cenu, fotky atd. Do databáze se zapíše až „Vytvořit kopii“.
+   ==========================================================*/
+function nextFreeProductId(src) {
+  const m = /^([A-Za-z]+)(\d+)$/.exec(src.product_id || "");
+  const prefix = m ? m[1].toUpperCase() : "RA";
+  const width = m ? Math.max(2, m[2].length) : 2;
+  let max = 0;
+  allProducts.forEach((p) => {
+    const mm = /^([A-Za-z]+)(\d+)$/.exec(p.product_id || "");
+    if (mm && mm[1].toUpperCase() === prefix) max = Math.max(max, parseInt(mm[2], 10));
+  });
+  return prefix + String(max + 1).padStart(width, "0");
+}
+
+// „VÁZA | RA86“ → „VÁZA | RA99“; bez koncovky ID se nové ID připojí.
+function nameWithId(name, oldId, newId) {
+  const base = String(name || "").trim();
+  if (oldId) {
+    const re = new RegExp("\\s*\\|\\s*" + oldId + "\\s*$", "i");
+    if (re.test(base)) return base.replace(re, " | " + newId);
+  }
+  return base ? `${base} | ${newId}` : `| ${newId}`;
+}
+
+function openDuplicate(src) {
+  const newId = nextFreeProductId(src);
+  const note = noteOf(src);
+  const nowIso = new Date().toISOString();
+  const today = window.localDateString();
+  const draft = {
+    _docId: newId,
+    _source: src,
+    product_id: newId,
+    name: nameWithId(src.name, src.product_id, newId),
+    price: src.price,
+    location: src.location || null,
+    ext_id: `${src.location || ""} | ${newId}`,
+    category_id: src.category_id != null ? src.category_id : null,
+    shipping_template_id: src.shipping_template_id != null ? src.shipping_template_id : null,
+    images: imagesOf(src).join(" "),
+    image_list: imagesOf(src).slice(),
+    priority_listing: !!src.priority_listing,
+    bold_title: !!src.bold_title,
+    highlight: !!src.highlight,
+    note: note || null,
+    // Popis z aktuální šablony (s poznámkou vzoru).
+    description: window.buildProductDescription(note),
+    excel_url: null,
+    sold: false,
+    sold_at: null,
+    date_added: today,
+    created_at: nowIso,
+    entry_mode: "duplicate",
+    duplicated_from: src.product_id || null,
+    raw: Object.assign({}, src.raw || {}, {
+      productId: newId,
+      note: note || "",
+      description: window.buildProductDescription(note),
+      dateAdded: today,
+      createdAt: nowIso,
+      entryMode: "duplicate"
+    })
+  };
+  delete draft.raw.syncedToDb;
+  delete draft.raw.entityId;
+  openEdit(draft, "duplicate");
+}
+
+async function saveDuplicate(draft, patch, uploaded) {
+  const col = window.db.collection("products");
+  const newId = draft.product_id;
+  // Interní pole (_docId, _source) do databáze nepatří.
+  const doc = {};
+  Object.keys(draft).forEach((k) => { if (k[0] !== "_") doc[k] = draft[k]; });
+  Object.assign(doc, patch);
+  delete doc.updated_at;
+
+  try {
+    // Pojistka: mezitím mohl stejné ID dostat produkt z appky.
+    const existing = await col.doc(newId).get();
+    if (existing.exists) {
+      setEditBusy(false);
+      showEditError(`ID ${newId} už mezitím dostal jiný produkt. Zavři okno, obnov dashboard a duplikuj znovu.`);
+      return;
+    }
+    await col.doc(newId).set(doc);
+  } catch (e) {
+    setEditBusy(false);
+    showEditError("Vytvoření kopie selhalo: " + (e.message || e));
+    return;
+  }
+  setEditBusy(false);
+
+  const created = Object.assign({ _docId: newId }, doc);
+  allProducts.push(created);
+  sortProducts();
+  closeEdit();
+  updateStats();
+  render();
+  showStatus(
+    `Vytvořena kopie ${newId} (z ${draft._source ? draft._source.product_id : "—"})` +
+      (uploaded ? ` · nahráno ${window.pluralCz(uploaded, "nová fotka", "nové fotky", "nových fotek")}.` : "."),
+    "success",
+    4500
+  );
 }
 
 /* --- Smazání produktu z databáze --- */

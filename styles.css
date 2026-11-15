@@ -636,6 +636,87 @@ code {
 }
 
 /* --------------------------------------------------------------------------
+   Poznámka k předmětu – přepínač variant + šablona s doplňovanými poli
+   -------------------------------------------------------------------------- */
+.seg-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  gap: 3px;
+}
+.seg-option {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+.seg-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.seg-option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--muted);
+  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.seg-option:hover span {
+  color: var(--fg);
+}
+.seg-option input:checked + span {
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+}
+.seg-option input:focus-visible + span {
+  outline: 2px solid var(--fg);
+  outline-offset: 1px;
+}
+
+.note-builder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 12px;
+  animation: rise 0.3s var(--ease);
+}
+.note-builder > .input {
+  flex: 1 1 100%;
+}
+.note-fixed {
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+.note-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.input.note-num {
+  width: 72px;
+  text-align: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+#note-preview {
+  white-space: pre-line;
+}
+#note-preview.is-error {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
    Fotky
    -------------------------------------------------------------------------- */
 .photo-count {

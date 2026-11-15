@@ -112,15 +112,24 @@ ID produktů se chovají stejně jako při focení – navazují na nejvyšší 
 ID a nejde je použít podruhé.
 
 ## 📝 Poznámka k předmětu
-V kroku **Detaily** je volitelné pole *Poznámka k předmětu*. Když ho vyplníš,
-vloží se do popisu nabídky jako **první sekce** (hned pod logo, nad „Nabízené
-zboží“); prázdná poznámka se do popisu nepromítne vůbec. Šablona popisu je
-v souboru **`description.js`** – sdílí ji appka i dashboard, takže se upravuje
-na jednom místě.
+V kroku **Detaily** se poznámka vybírá ze tří variant (poslední volba se
+pamatuje pro další produkty):
 
-Poznámka jde změnit i později v dashboardu (**Upravit**). Popis nabídky se
-při tom vygeneruje znovu z aktuální šablony – a jen tehdy; úprava ceny nebo
-umístění uložený popis nepřepisuje.
+| Varianta | Co se doplní | Text v popisu nabídky |
+|---|---|---|
+| **Rozměr** | jen dvě čísla | `Tento předmět má rozměr 5 x 5 cm.` |
+| **Rozměr a poznámka** | dvě čísla + text za dvojtečkou | `Tento předmět má rozměr: 5 x 5 cm.`<br>`Poznámka k předmětu: tento předmět je velmi zachovalý.` |
+| **Bez poznámky** | nic | sekce poznámky v popisu není vůbec |
+
+„x“ a „cm.“ jsou pevné, desetinná tečka se převede na čárku (5.5 → 5,5)
+a za text poznámky se doplní tečka, pokud chybí. Pod poli je živý náhled
+přesně toho, co půjde do popisu. Poznámka se vloží do popisu nabídky jako
+**první sekce** (pod logo, nad „Nabízené zboží“). Šablona popisu je
+v souboru **`description.js`** – sdílí ji appka i dashboard.
+
+Poznámka jde změnit i později v dashboardu (**Upravit**, volný text).
+Popis nabídky se při tom vygeneruje znovu z aktuální šablony – a jen tehdy;
+úprava ceny nebo umístění uložený popis nepřepisuje.
 
 ## 📸 Víc než 3 fotky
 Povinné jsou dál 3 fotky (ve zpětném režimu 1), ale přidat jich jde až
@@ -181,6 +190,16 @@ Sdílené soubory: `photos.js` (ořez, nahrání na Cloudinary, zmenšené náhl
 Dashboard nestahuje plné fotky (1600 px): karty berou z Cloudinary náhled
 480 px a načítají se až při doscrollování. Kdyby Cloudinary transformace
 odmítl, obrázek se sám přepne na originál.
+
+## ⧉ Duplikace produktu
+Na kartě v dashboardu je ikona **kopie**. Otevře okno *Duplikovat produkt*
+předvyplněné podle vzoru (název, cena, umístění, kategorie, doprava,
+propagace, fotky, poznámka) s **novým ID** – dalším volným po nejvyšším ID
+se stejným prefixem, takže se nikdy nepoužije dvakrát. Před uložením jde
+cokoli změnit, přidat i odebrat fotky. Do databáze se kopie zapíše až
+tlačítkem **Vytvořit kopii**; vzor zůstane beze změny. Kopie je neprodaná,
+s dnešním datem a s popisem z aktuální šablony; pole `duplicated_from`
+říká, z jakého produktu vznikla.
 
 ## ✅ Hromadné označení prodaných
 V dashboardu tlačítko **Hromadně prodané** otevře okno, kam vložíš názvy

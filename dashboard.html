@@ -206,9 +206,10 @@
     <div class="modal-background"></div>
     <div class="modal-content edit-modal-content">
       <div class="box">
-        <p class="modal-title">Upravit produkt</p>
+        <p class="modal-title" id="edit-title">Upravit produkt</p>
         <p class="modal-text">
-          ID <strong id="edit-product-id">—</strong> · nedá se měnit, je to klíč v databázi
+          <span id="edit-id-label">ID</span> <strong id="edit-product-id">—</strong>
+          · <span id="edit-id-hint">nedá se měnit, je to klíč v databázi</span>
         </p>
 
         <!-- Název -->
@@ -346,7 +347,7 @@
           <span class="edit-modal-buttons-right">
             <button type="button" id="edit-cancel-btn" class="btn btn--ghost">Zrušit</button>
             <button type="button" id="edit-save-btn" class="btn">
-              <i data-icon="save"></i> Uložit
+              <i data-icon="save"></i> <span id="edit-save-text">Uložit</span>
             </button>
           </span>
         </div>

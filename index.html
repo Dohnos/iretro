@@ -206,12 +206,46 @@
         <div id="location-history" class="input-history"></div>
       </div>
 
-      <!-- Poznámka k předmětu – propíše se do popisu nabídky -->
-      <div class="field">
-        <label for="product-note" class="label">Poznámka k předmětu <small>volitelné</small></label>
-        <textarea id="product-note" class="textarea" rows="3"
-                  placeholder="Např. drobný škrábanec na víku, chybí originální krabička…"></textarea>
-        <p class="help">Zobrazí se v popisu nabídky jako první sekce.</p>
+      <!-- Poznámka k předmětu: tři předpřipravené varianty.
+           Text se skládá ze šablony, uživatel doplní jen čísla / svůj text. -->
+      <div class="field" id="note-field">
+        <span class="label">Poznámka k předmětu</span>
+        <div class="seg-switch" role="radiogroup" aria-label="Typ poznámky">
+          <label class="seg-option">
+            <input type="radio" name="note-mode" value="size" />
+            <span>Rozměr</span>
+          </label>
+          <label class="seg-option">
+            <input type="radio" name="note-mode" value="size-note" />
+            <span>Rozměr a&nbsp;poznámka</span>
+          </label>
+          <label class="seg-option">
+            <input type="radio" name="note-mode" value="none" checked />
+            <span>Bez poznámky</span>
+          </label>
+        </div>
+
+        <!-- Rozměr: „Tento předmět má rozměr 5 x 5 cm.“ – doplní se jen čísla -->
+        <div id="note-size-row" class="note-builder is-hidden">
+          <span class="note-fixed" id="note-size-prefix">Tento předmět má rozměr</span>
+          <span class="note-size">
+            <input id="note-size-a" type="text" inputmode="decimal" class="input note-num"
+                   placeholder="5" autocomplete="off" aria-label="První rozměr v cm" />
+            <span class="note-fixed">x</span>
+            <input id="note-size-b" type="text" inputmode="decimal" class="input note-num"
+                   placeholder="5" autocomplete="off" aria-label="Druhý rozměr v cm" />
+            <span class="note-fixed">cm.</span>
+          </span>
+        </div>
+
+        <!-- Poznámka: „Poznámka k předmětu: …“ – doplní se jen text za dvojtečkou -->
+        <div id="note-text-row" class="note-builder is-hidden">
+          <span class="note-fixed">Poznámka k předmětu:</span>
+          <input id="note-text" type="text" class="input" autocomplete="off"
+                 placeholder="tento předmět je velmi zachovalý" />
+        </div>
+
+        <p class="help" id="note-preview">V popisu nabídky nebude žádná poznámka.</p>
       </div>
 
       <!-- Výběr kategorie -->

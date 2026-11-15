@@ -59,7 +59,14 @@ const photoStepTitle = document.getElementById("photo-step-title");
 const photoPreview = document.getElementById("photo-preview");
 const photoPreviewDetails = document.getElementById("photo-preview-details");
 const detailsPhotoCount = document.getElementById("details-photo-count");
-const productNoteInput = document.getElementById("product-note");
+const noteModeRadios = Array.from(document.querySelectorAll('input[name="note-mode"]'));
+const noteSizeRow = document.getElementById("note-size-row");
+const noteSizePrefix = document.getElementById("note-size-prefix");
+const noteSizeA = document.getElementById("note-size-a");
+const noteSizeB = document.getElementById("note-size-b");
+const noteTextRow = document.getElementById("note-text-row");
+const noteTextInput = document.getElementById("note-text");
+const notePreview = document.getElementById("note-preview");
 
 const modeLiveRadio = document.getElementById("mode-live");
 const modeRetroRadio = document.getElementById("mode-retro");
@@ -610,6 +617,123 @@ galleryInput.addEventListener("change", async () => {
 });
 
 /* ---------------------------------
+   Poznámka k předmětu – tři šablony
+   - Rozměr:            „Tento předmět má rozměr 5 x 5 cm.“
+   - Rozměr a poznámka: „Tento předmět má rozměr: 5 x 5 cm.“
+                        „Poznámka k předmětu: …“ (na dalším řádku)
+   - Bez poznámky:      v popisu nabídky žádná sekce poznámky
+   Uživatel doplní jen čísla (x a cm jsou pevné) a text za dvojtečkou.
+   Zvolená varianta se pamatuje pro další produkty.
+-----------------------------------*/
+const NOTE_MODE_KEY = "noteMode";
+
+function getNoteMode() {
+  const checked = noteModeRadios.find((r) => r.checked);
+  return checked ? checked.value : "none";
+}
+
+// „5.5“ → „5,5“ (česká desetinná čárka), mezery pryč.
+function cleanDimension(value) {
+  return String(value || "").replace(/\s+/g, "").replace(".", ",");
+}
+function isDimension(value) {
+  return /^\d+(,\d+)?$/.test(value);
+}
+// Text za „Poznámka k předmětu:“ zakončíme tečkou, pokud ji uživatel nenapsal.
+function asSentence(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  return /[.!?…]$/.test(t) ? t : t + ".";
+}
+
+// Vrátí { text, errors: [{ input, message }] }. S lenient=true chybějící
+// hodnoty nahradí „…“ (pro živý náhled) a chyby nehlásí.
+function buildNoteFromForm(lenient = false) {
+  const mode = getNoteMode();
+  const errors = [];
+  if (mode === "none") return { text: "", errors };
+
+  const a = cleanDimension(noteSizeA.value);
+  const b = cleanDimension(noteSizeB.value);
+  if (!lenient) {
+    if (!isDimension(a)) errors.push({ input: noteSizeA, message: "Doplň rozměr číslem (např. 5 nebo 5,5)." });
+    if (!isDimension(b)) errors.push({ input: noteSizeB, message: "Doplň rozměr číslem (např. 5 nebo 5,5)." });
+  }
+  const show = (v) => (v ? v : "…");
+
+  if (mode === "size") {
+    return { text: `Tento předmět má rozměr ${show(a)} x ${show(b)} cm.`, errors };
+  }
+
+  const free = asSentence(noteTextInput.value);
+  if (!lenient && !free) errors.push({ input: noteTextInput, message: "Doplň poznámku, nebo zvol jen „Rozměr“." });
+  return {
+    text: `Tento předmět má rozměr: ${show(a)} x ${show(b)} cm.\nPoznámka k předmětu: ${free || "…"}`,
+    errors
+  };
+}
+
+// Označí chybná pole; vrátí true, když je vše v pořádku.
+function showNoteErrors(result) {
+  [noteSizeA, noteSizeB, noteTextInput].forEach((el) => el.classList.remove("input-error"));
+  notePreview.classList.remove("is-error");
+  if (!result.errors.length) return true;
+  result.errors.forEach((err) => err.input.classList.add("input-error"));
+  notePreview.classList.add("is-error");
+  notePreview.textContent = result.errors[0].message;
+  return false;
+}
+
+function updateNotePreview() {
+  if (notePreview.classList.contains("is-error")) return; // chybu necháme vidět, dokud ji uživatel neopraví
+  const { text } = buildNoteFromForm(true);
+  notePreview.textContent = text
+    ? "V popisu nabídky bude:\n" + text
+    : "V popisu nabídky nebude žádná poznámka.";
+}
+
+function applyNoteModeUI() {
+  const mode = getNoteMode();
+  noteSizeRow.classList.toggle("is-hidden", mode === "none");
+  noteTextRow.classList.toggle("is-hidden", mode !== "size-note");
+  noteSizePrefix.textContent = mode === "size-note" ? "Tento předmět má rozměr:" : "Tento předmět má rozměr";
+  showNoteErrors({ errors: [] });
+  updateNotePreview();
+}
+
+// Zapamatovaná varianta z minula
+try {
+  const savedMode = localStorage.getItem(NOTE_MODE_KEY);
+  const radio = noteModeRadios.find((r) => r.value === savedMode);
+  if (radio) radio.checked = true;
+} catch (e) {
+  /* bez localStorage zůstane výchozí „Bez poznámky“ */
+}
+applyNoteModeUI();
+
+noteModeRadios.forEach((r) =>
+  r.addEventListener("change", () => {
+    try {
+      localStorage.setItem(NOTE_MODE_KEY, getNoteMode());
+    } catch (e) {
+      /* nevadí */
+    }
+    applyNoteModeUI();
+    // Po výběru varianty rovnou do prvního pole, ať se dá hned psát.
+    if (getNoteMode() !== "none") noteSizeA.focus();
+  })
+);
+[noteSizeA, noteSizeB, noteTextInput].forEach((el) =>
+  el.addEventListener("input", () => {
+    el.classList.remove("input-error");
+    if (![noteSizeA, noteSizeB, noteTextInput].some((x) => x.classList.contains("input-error"))) {
+      notePreview.classList.remove("is-error");
+    }
+    updateNotePreview();
+  })
+);
+
+/* ---------------------------------
    Výběr kategorie
 -----------------------------------*/
 categoryBtn.addEventListener("click", () => {
@@ -684,7 +808,8 @@ async function addProduct() {
   const price = document.getElementById('product-price').value.trim();
   const categoryId = categoryIdInput.value.trim();
   const location = document.getElementById('product-location').value.trim();
-  const note = productNoteInput.value.trim();
+  const noteResult = buildNoteFromForm();
+  const note = noteResult.text;
   const shippingId = shippingMethodSelect.value;
 
   clearFieldError('product-name');
@@ -708,6 +833,7 @@ async function addProduct() {
     showFieldError('shippingMethod', 'Vyber dopravu!');
     valid = false;
   }
+  if (!showNoteErrors(noteResult)) valid = false;
   if (!valid) {
     updateStatus('Vyplň všechna povinná pole!', "warning");
     // Tlačítko je na konci dlouhého formuláře – skočíme na první chybu.
@@ -840,7 +966,11 @@ function resetProductForm() {
   document.getElementById("product-name").value = "";
   document.getElementById("product-price").value = "";
   document.getElementById("product-location").value = "";
-  productNoteInput.value = "";
+  noteSizeA.value = "";
+  noteSizeB.value = "";
+  noteTextInput.value = "";
+  showNoteErrors({ errors: [] });
+  updateNotePreview();
   categoryIdInput.value = "";
   categoryBtnText.textContent = "Vybrat kategorii";
   shippingMethodSelect.value = DEFAULT_SHIPPING_ID;
